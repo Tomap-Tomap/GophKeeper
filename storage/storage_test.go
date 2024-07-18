@@ -52,6 +52,30 @@ func TestStorage_CreateUser(t *testing.T) {
 	require.Equal(t, password, strings.TrimSpace(gotPassword))
 }
 
+func TestStorage_GetUserData(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+	defer truncateTable(t, s)
+
+	wantUD := &UserData{
+		Login:    "TestLogin",
+		Password: "TestPassword",
+		Salt:     "TestSalt",
+	}
+
+	_, err = s.conn.Exec(context.Background(), "INSERT INTO users (login, password) VALUES ($1, $2);", wantUD.Login, wantUD.Password)
+	require.NoError(t, err)
+	err = s.conn.QueryRow(context.Background(), "SELECT id FROM users WHERE login = $1;", wantUD.Login).Scan(&wantUD.ID)
+	require.NoError(t, err)
+	_, err = s.conn.Exec(context.Background(), "INSERT INTO salts (login, salt) VALUES ($1, $2);", wantUD.Login, wantUD.Salt)
+	require.NoError(t, err)
+
+	gotUD, err := s.GetUserData(context.Background(), wantUD.Login, wantUD.Login)
+	require.NoError(t, err)
+	require.Equal(t, wantUD, gotUD)
+}
+
 func truncateTable(t *testing.T, s *Storage) {
 	_, err := s.conn.Exec(context.Background(), truncateQuery)
 	require.NoError(t, err)
