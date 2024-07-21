@@ -4,45 +4,10 @@ package storage
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// UserData прдеставлявет собой структуру данных о пользователе
-type UserData struct {
-	ID       pgtype.UUID
-	Login    string
-	Password string
-	Salt     string
-}
-
-// ScanRow необходим для реализации интерфейса pgx.RowScanner
-func (u *UserData) ScanRow(rows pgx.Rows) error {
-	values, err := rows.Values()
-	if err != nil {
-		return err
-	}
-
-	for i := range values {
-		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
-		case "id":
-			u.ID.Bytes = values[i].([16]byte)
-			u.ID.Valid = true
-		case "login":
-			u.Login = values[i].(string)
-		case "password":
-			u.Password = strings.TrimSpace(values[i].(string))
-		case "salt":
-			u.Salt = strings.TrimSpace(values[i].(string))
-		}
-	}
-
-	return nil
-}
 
 // Storage представляет собой структуры для взаимодействия с БД
 type Storage struct {
@@ -69,30 +34,64 @@ func (s *Storage) Close() {
 }
 
 // CreateUser добавляет запись по пользователю в БД
-func (s *Storage) CreateUser(ctx context.Context, login, password string) error {
-	query := `
-		INSERT INTO users (login, password) VALUES ($1, $2);
+func (s *Storage) CreateUser(ctx context.Context, login, loginHashed, salt, password string) (*User, error) {
+	queryUsers := `
+		WITH t AS (
+			INSERT INTO users (login, password) VALUES ($1, $2)
+			RETURNING *
+		)
+		SELECT id, login, password FROM t;
 	`
 
-	_, err := retry2(ctx, s.retryPolicy, func() (pgconn.CommandTag, error) {
-		return s.conn.Exec(ctx, query, login, password)
+	querySalts := `
+		WITH t AS (
+			INSERT INTO salts (login, salt) VALUES ($1, $2)
+			RETURNING *
+		)
+		SELECT salt FROM t;
+	`
+
+	ud := &User{}
+
+	err := pgx.BeginFunc(ctx, s.conn, func(tx pgx.Tx) error {
+		err := retry(ctx, s.retryPolicy, func() error {
+			return s.conn.QueryRow(ctx, queryUsers, login, password).Scan(ud)
+		})
+
+		if err != nil {
+			return fmt.Errorf("insert into users table login %s: %w", login, err)
+		}
+
+		err = retry(ctx, s.retryPolicy, func() error {
+			return s.conn.QueryRow(ctx, querySalts, loginHashed, salt).Scan(ud)
+		})
+
+		if err != nil {
+			return fmt.Errorf("insert into salts table login %s: %w", login, err)
+		}
+
+		return nil
 	})
 
-	return err
+	if err != nil {
+		return nil, err
+	}
+
+	return ud, nil
 }
 
-// GetUserData возвращает даные о пользователе БД
-func (s *Storage) GetUserData(ctx context.Context, login, loginHash string) (*UserData, error) {
+// GetUser возвращает даные о пользователе БД
+func (s *Storage) GetUser(ctx context.Context, login, loginHashed string) (*User, error) {
 	query := `
 		SELECT u.id, u.login, u.password, s.salt
 		FROM users u, salts s
 		WHERE u.login = $1 AND s.login = $2;
 	`
 
-	ud := &UserData{}
+	ud := &User{}
 
 	err := retry(ctx, s.retryPolicy, func() error {
-		return s.conn.QueryRow(ctx, query, login, loginHash).Scan(ud)
+		return s.conn.QueryRow(ctx, query, login, loginHashed).Scan(ud)
 	})
 
 	if err != nil {
@@ -100,4 +99,92 @@ func (s *Storage) GetUserData(ctx context.Context, login, loginHash string) (*Us
 	}
 
 	return ud, nil
+}
+
+// CreatePassword добавляет данные по паролю в БД
+func (s *Storage) CreatePassword(ctx context.Context, userID, name, login, password, meta string) (*Password, error) {
+	query := `
+		WITH t AS (
+			INSERT INTO passwords (user_id, name, login, password, meta) VALUES ($1, $2, $3, $4, $5)
+			RETURNING *
+		)
+		SELECT * FROM t;
+	`
+
+	pwd := &Password{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, userID, name, login, password, meta).Scan(pwd)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("insert into passwords table name %s: %w", name, err)
+	}
+
+	return pwd, nil
+}
+
+// GetPassword возращает данные по сохраненному паспорту
+func (s *Storage) GetPassword(ctx context.Context, passwordID string) (*Password, error) {
+	query := `
+		SELECT *
+		FROM passwords
+		WHERE id = $1;
+	`
+
+	pwd := &Password{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, passwordID).Scan(pwd)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get password id %s: %w", passwordID, err)
+	}
+
+	return pwd, nil
+}
+
+// GetAllPassword возращает все данные по сохраненным паспортам
+func (s *Storage) GetAllPassword(ctx context.Context, userID string) ([]Password, error) {
+	query := `
+		SELECT *
+		FROM passwords
+		WHERE user_id = $1;
+	`
+
+	pwds := make([]Password, 0)
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		rows, err := s.conn.Query(ctx, query, userID)
+
+		if err != nil {
+			return err
+		}
+
+		defer rows.Close()
+
+		for rows.Next() {
+			var pwd Password
+			err := rows.Scan(&pwd)
+
+			if err != nil {
+				return err
+			}
+
+			pwds = append(pwds, pwd)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get passwords user_id %s: %w", userID, err)
+	}
+
+	if len(pwds) == 0 {
+		return nil, fmt.Errorf("user to user_id %s don't have passwords", userID)
+	}
+
+	return pwds, nil
 }

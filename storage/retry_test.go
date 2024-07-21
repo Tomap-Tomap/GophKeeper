@@ -104,7 +104,8 @@ func Test_retry2(t *testing.T) {
 			increment:  2,
 		}
 
-		ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
 
 		_, err := retry2(ctx, rp, func() (*int, error) {
 			return nil, &pgconn.PgError{Code: "08000"}
@@ -192,7 +193,8 @@ func Test_retry(t *testing.T) {
 			increment:  2,
 		}
 
-		ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
 
 		err := retry(ctx, rp, func() error {
 			return &pgconn.PgError{Code: "08000"}

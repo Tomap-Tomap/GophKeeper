@@ -18,8 +18,8 @@ $gen_update_at$ LANGUAGE plpgsql;
 
 CREATE TABLE users (
     id UUID NOT NULL,
-    login VARCHAR(150) UNIQUE,
-    password CHAR(64),
+    login VARCHAR(150) UNIQUE NOT NULL CHECK (login <> ''),
+    password CHAR(64) NOT NULL CHECK (password <> ''),
     updateAt TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY(id)
 );
@@ -29,8 +29,8 @@ CREATE TRIGGER gen_update_at BEFORE INSERT OR UPDATE ON users
     FOR EACH ROW EXECUTE PROCEDURE gen_update_at();    
 
 CREATE TABLE salts (
-    login CHAR(64),
-    salt VARCHAR(150)
+    login CHAR(64) UNIQUE NOT NULL CHECK (login <> ''),
+    salt VARCHAR(150) NOT NULL CHECK (salt <> '')
 );
 CREATE INDEX salts_login_idx ON salts (login);
 
@@ -41,7 +41,8 @@ CREATE TABLE passwords (
     login VARCHAR(150),
     password VARCHAR(150),
     meta TEXT,
-    updateAt TIMESTAMP WITH TIME ZONE
+    updateAt TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY(id)
 );
 CREATE TRIGGER gen_uuid BEFORE INSERT ON passwords
     FOR EACH ROW EXECUTE PROCEDURE gen_uuid();
@@ -54,7 +55,8 @@ CREATE TABLE files (
     name VARCHAR(150),
     pathToFile VARCHAR(150),
     meta TEXT,
-    updateAt TIMESTAMP WITH TIME ZONE
+    updateAt TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY(id)
 );
 CREATE TRIGGER gen_uuid BEFORE INSERT ON files
     FOR EACH ROW EXECUTE PROCEDURE gen_uuid();
@@ -67,7 +69,8 @@ CREATE TABLE banks (
     name VARCHAR(150),
     banksData VARCHAR(150),
     meta TEXT,
-    updateAt TIMESTAMP WITH TIME ZONE
+    updateAt TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY(id)
 );
 CREATE TRIGGER gen_uuid BEFORE INSERT ON banks
     FOR EACH ROW EXECUTE PROCEDURE gen_uuid();
@@ -80,7 +83,8 @@ CREATE TABLE texts (
     name VARCHAR(150),
     text TEXT,
     meta TEXT,
-    updateAt TIMESTAMP WITH TIME ZONE
+    updateAt TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY(id)
 );
 CREATE TRIGGER gen_uuid BEFORE INSERT ON texts
     FOR EACH ROW EXECUTE PROCEDURE gen_uuid();
