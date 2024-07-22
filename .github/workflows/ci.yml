@@ -1,0 +1,17 @@
+name: ci
+
+on: 
+  pull_request:
+
+jobs:
+  unittests:
+    runs-on: ubuntu-latest    
+    container: golang:1.22
+
+    steps:
+      - uses: actions/checkout@v4  
+
+      - name: Unit test
+        run: |
+          go test ./... -tags=unit -v
+    

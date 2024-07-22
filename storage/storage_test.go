@@ -1,3 +1,5 @@
+//go:build integration
+
 // Package storage определяет структуры и методы для работы с базой данных postgres
 package storage
 
