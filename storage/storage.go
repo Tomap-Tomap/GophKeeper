@@ -188,3 +188,91 @@ func (s *Storage) GetAllPassword(ctx context.Context, userID string) ([]Password
 
 	return pwds, nil
 }
+
+// CreateFile добавляет данные о файле в БД
+func (s *Storage) CreateFile(ctx context.Context, userID, name, pathToFile, meta string) (*File, error) {
+	query := `
+		WITH t AS (
+			INSERT INTO files (user_id, name, pathtofile, meta) VALUES ($1, $2, $3, $4)
+			RETURNING *
+		)
+		SELECT * FROM t;
+	`
+
+	file := &File{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, userID, name, pathToFile, meta).Scan(file)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("insert into files table name %s: %w", name, err)
+	}
+
+	return file, nil
+}
+
+// GetFile возращает данные по сохраненному файлу
+func (s *Storage) GetFile(ctx context.Context, passwordID string) (*File, error) {
+	query := `
+		SELECT *
+		FROM files
+		WHERE id = $1;
+	`
+
+	file := &File{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, passwordID).Scan(file)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get file id %s: %w", passwordID, err)
+	}
+
+	return file, nil
+}
+
+// GetAllFiles возращает все данные по сохраненным файлам
+func (s *Storage) GetAllFiles(ctx context.Context, userID string) ([]File, error) {
+	query := `
+		SELECT *
+		FROM files
+		WHERE user_id = $1;
+	`
+
+	files := make([]File, 0)
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		rows, err := s.conn.Query(ctx, query, userID)
+
+		if err != nil {
+			return err
+		}
+
+		defer rows.Close()
+
+		for rows.Next() {
+			var file File
+			err := rows.Scan(&file)
+
+			if err != nil {
+				return err
+			}
+
+			files = append(files, file)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get files user_id %s: %w", userID, err)
+	}
+
+	if len(files) == 0 {
+		return nil, fmt.Errorf("user to user_id %s don't have files", userID)
+	}
+
+	return files, nil
+}

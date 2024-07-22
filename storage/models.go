@@ -101,8 +101,65 @@ func (p *Password) ScanRow(rows pgx.Rows) error {
 			p.Password = values[i].(string)
 		case "meta":
 			p.Meta = values[i].(string)
-		case "updateAt":
+		case "updateat":
 			p.UpdateAt = values[i].(time.Time)
+		}
+	}
+
+	return nil
+}
+
+// File представляет собой структуру данных о сохраненном файле пользователя
+type File struct {
+	ID         string
+	UserID     string
+	Name       string
+	PathToFile string
+	Meta       string
+	UpdateAt   time.Time
+}
+
+// ScanRow необходим для реализации интерфейса pgx.RowScanner
+func (f *File) ScanRow(rows pgx.Rows) error {
+	values, err := rows.Values()
+	if err != nil {
+		return err
+	}
+
+	for i := range values {
+		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
+		case "id":
+			uuid := pgtype.UUID{
+				Bytes: values[i].([16]byte),
+				Valid: true,
+			}
+			id, err := uuid.Value()
+
+			if err != nil {
+				return err
+			}
+
+			f.ID = id.(string)
+		case "user_id":
+			uuid := pgtype.UUID{
+				Bytes: values[i].([16]byte),
+				Valid: true,
+			}
+			id, err := uuid.Value()
+
+			if err != nil {
+				return err
+			}
+
+			f.UserID = id.(string)
+		case "name":
+			f.Name = values[i].(string)
+		case "pathtofile":
+			f.PathToFile = values[i].(string)
+		case "meta":
+			f.Meta = values[i].(string)
+		case "updateat":
+			f.UpdateAt = values[i].(time.Time)
 		}
 	}
 

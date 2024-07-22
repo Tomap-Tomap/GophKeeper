@@ -183,6 +183,7 @@ func TestStorage_CreatePassword(t *testing.T) {
 		require.Equal(t, wantPassword.Password, gotPassword.Password)
 		require.Equal(t, wantPassword.Meta, gotPassword.Meta)
 		require.NotEmpty(t, gotPassword.ID)
+		require.False(t, gotPassword.UpdateAt.IsZero())
 	})
 
 	t.Run("unknown user", func(t *testing.T) {
@@ -262,5 +263,112 @@ func TestStorage_GetAllPassword(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, gotPWDs)
 		require.ErrorContains(t, err, "user to user_id 00000000-0000-0000-0000-000000000000 don't have passwords")
+	})
+}
+
+func TestStorage_CreateFile(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantFile := File{
+			UserID:     u.ID,
+			Name:       "FileName",
+			PathToFile: "FilePath",
+			Meta:       "FileMeta",
+		}
+
+		gotFile, err := s.CreateFile(context.Background(), u.ID, wantFile.Name, wantFile.PathToFile, wantFile.Meta)
+		require.NoError(t, err)
+		require.Equal(t, wantFile.UserID, gotFile.UserID)
+		require.Equal(t, wantFile.Name, gotFile.Name)
+		require.Equal(t, wantFile.PathToFile, gotFile.PathToFile)
+		require.Equal(t, wantFile.Meta, gotFile.Meta)
+		require.NotEmpty(t, gotFile.ID)
+		require.False(t, gotFile.UpdateAt.IsZero())
+	})
+
+	t.Run("unknown user", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotPassword, err := s.CreateFile(
+			context.Background(),
+			"00000000-0000-0000-0000-000000000000",
+			"FileName",
+			"FilePath",
+			"FileMeta",
+		)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "insert into files table name FileName")
+		require.Nil(t, gotPassword)
+	})
+}
+
+func TestStorage_GetFile(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantFile, err := s.CreateFile(context.Background(), u.ID, "FileName", "FilePath", "PWDMeta")
+		require.NoError(t, err)
+
+		gotFile, err := s.GetFile(context.Background(), wantFile.ID)
+		require.NoError(t, err)
+		require.Equal(t, wantFile, gotFile)
+	})
+
+	t.Run("unknown id", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotPassword, err := s.GetFile(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.Error(t, err)
+		require.ErrorContains(t, err, "get file id 00000000-0000-0000-0000-000000000000")
+		require.Nil(t, gotPassword)
+	})
+}
+
+func TestStorage_GetAllFiles(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantFile1, err := s.CreateFile(context.Background(), u.ID, "FileName1", "FilePath1", "FileMeta1")
+		require.NoError(t, err)
+
+		wantFile2, err := s.CreateFile(context.Background(), u.ID, "FileName2", "FilePath2", "FileMeta2")
+		require.NoError(t, err)
+
+		wantFiles := []File{*wantFile1, *wantFile2}
+
+		gotFiles, err := s.GetAllFiles(context.Background(), u.ID)
+		require.NoError(t, err)
+		require.Equal(t, wantFiles, gotFiles)
+	})
+
+	t.Run("unknown user_id", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotFiles, err := s.GetAllFiles(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.Error(t, err)
+		require.Nil(t, gotFiles)
+		require.ErrorContains(t, err, "user to user_id 00000000-0000-0000-0000-000000000000 don't have files")
 	})
 }
