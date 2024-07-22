@@ -165,3 +165,117 @@ func (f *File) ScanRow(rows pgx.Rows) error {
 
 	return nil
 }
+
+// Bank представляет собой структуру данных о сохраненных банковских данных пользователя
+type Bank struct {
+	ID        string
+	UserID    string
+	Name      string
+	BanksData string
+	Meta      string
+	UpdateAt  time.Time
+}
+
+// ScanRow необходим для реализации интерфейса pgx.RowScanner
+func (f *Bank) ScanRow(rows pgx.Rows) error {
+	values, err := rows.Values()
+	if err != nil {
+		return err
+	}
+
+	for i := range values {
+		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
+		case "id":
+			uuid := pgtype.UUID{
+				Bytes: values[i].([16]byte),
+				Valid: true,
+			}
+			id, err := uuid.Value()
+
+			if err != nil {
+				return err
+			}
+
+			f.ID = id.(string)
+		case "user_id":
+			uuid := pgtype.UUID{
+				Bytes: values[i].([16]byte),
+				Valid: true,
+			}
+			id, err := uuid.Value()
+
+			if err != nil {
+				return err
+			}
+
+			f.UserID = id.(string)
+		case "name":
+			f.Name = values[i].(string)
+		case "banksdata":
+			f.BanksData = values[i].(string)
+		case "meta":
+			f.Meta = values[i].(string)
+		case "updateat":
+			f.UpdateAt = values[i].(time.Time)
+		}
+	}
+
+	return nil
+}
+
+// Text представляет собой структуру данных о сохраненных текстовых данных
+type Text struct {
+	ID       string
+	UserID   string
+	Name     string
+	Text     string
+	Meta     string
+	UpdateAt time.Time
+}
+
+// ScanRow необходим для реализации интерфейса pgx.RowScanner
+func (f *Text) ScanRow(rows pgx.Rows) error {
+	values, err := rows.Values()
+	if err != nil {
+		return err
+	}
+
+	for i := range values {
+		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
+		case "id":
+			uuid := pgtype.UUID{
+				Bytes: values[i].([16]byte),
+				Valid: true,
+			}
+			id, err := uuid.Value()
+
+			if err != nil {
+				return err
+			}
+
+			f.ID = id.(string)
+		case "user_id":
+			uuid := pgtype.UUID{
+				Bytes: values[i].([16]byte),
+				Valid: true,
+			}
+			id, err := uuid.Value()
+
+			if err != nil {
+				return err
+			}
+
+			f.UserID = id.(string)
+		case "name":
+			f.Name = values[i].(string)
+		case "text":
+			f.Text = values[i].(string)
+		case "meta":
+			f.Meta = values[i].(string)
+		case "updateat":
+			f.UpdateAt = values[i].(time.Time)
+		}
+	}
+
+	return nil
+}

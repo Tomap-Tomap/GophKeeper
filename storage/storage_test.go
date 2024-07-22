@@ -372,3 +372,217 @@ func TestStorage_GetAllFiles(t *testing.T) {
 		require.ErrorContains(t, err, "user to user_id 00000000-0000-0000-0000-000000000000 don't have files")
 	})
 }
+
+func TestStorage_CreateBank(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantBank := Bank{
+			UserID:    u.ID,
+			Name:      "BankName",
+			BanksData: "BankData",
+			Meta:      "BankMeta",
+		}
+
+		gotBank, err := s.CreateBank(context.Background(), u.ID, wantBank.Name, wantBank.BanksData, wantBank.Meta)
+		require.NoError(t, err)
+		require.Equal(t, wantBank.UserID, gotBank.UserID)
+		require.Equal(t, wantBank.Name, gotBank.Name)
+		require.Equal(t, wantBank.BanksData, gotBank.BanksData)
+		require.Equal(t, wantBank.Meta, gotBank.Meta)
+		require.NotEmpty(t, gotBank.ID)
+		require.False(t, gotBank.UpdateAt.IsZero())
+	})
+
+	t.Run("unknown user", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotPassword, err := s.CreateBank(
+			context.Background(),
+			"00000000-0000-0000-0000-000000000000",
+			"BankName",
+			"BankData",
+			"BankMeta",
+		)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "insert into banks table name BankName")
+		require.Nil(t, gotPassword)
+	})
+}
+
+func TestStorage_GetBank(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantBank, err := s.CreateBank(context.Background(), u.ID, "BankName", "BankData", "BankMeta")
+		require.NoError(t, err)
+
+		gotBank, err := s.GetBank(context.Background(), wantBank.ID)
+		require.NoError(t, err)
+		require.Equal(t, wantBank, gotBank)
+	})
+
+	t.Run("unknown id", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotBank, err := s.GetBank(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.Error(t, err)
+		require.ErrorContains(t, err, "get bank data id 00000000-0000-0000-0000-000000000000")
+		require.Nil(t, gotBank)
+	})
+}
+
+func TestStorage_GetAllBanks(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantBank1, err := s.CreateBank(context.Background(), u.ID, "BankName1", "BankData1", "BankMeta1")
+		require.NoError(t, err)
+
+		wantBank2, err := s.CreateBank(context.Background(), u.ID, "BankName2", "BankData2", "BankMeta2")
+		require.NoError(t, err)
+
+		wantBanks := []Bank{*wantBank1, *wantBank2}
+
+		gotBanks, err := s.GetAllBanks(context.Background(), u.ID)
+		require.NoError(t, err)
+		require.Equal(t, wantBanks, gotBanks)
+	})
+
+	t.Run("unknown user_id", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotBanks, err := s.GetAllBanks(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.Error(t, err)
+		require.Nil(t, gotBanks)
+		require.ErrorContains(t, err, "user to user_id 00000000-0000-0000-0000-000000000000 don't have bank data")
+	})
+}
+
+func TestStorage_CreateText(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantText := Text{
+			UserID: u.ID,
+			Name:   "TextName",
+			Text:   "TextData",
+			Meta:   "TextMeta",
+		}
+
+		gotText, err := s.CreateText(context.Background(), u.ID, wantText.Name, wantText.Text, wantText.Meta)
+		require.NoError(t, err)
+		require.Equal(t, wantText.UserID, gotText.UserID)
+		require.Equal(t, wantText.Name, gotText.Name)
+		require.Equal(t, wantText.Text, gotText.Text)
+		require.Equal(t, wantText.Meta, gotText.Meta)
+		require.NotEmpty(t, gotText.ID)
+		require.False(t, gotText.UpdateAt.IsZero())
+	})
+
+	t.Run("unknown user", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotPassword, err := s.CreateText(
+			context.Background(),
+			"00000000-0000-0000-0000-000000000000",
+			"TextName",
+			"TextData",
+			"TextMeta",
+		)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "insert into texts table name TextName")
+		require.Nil(t, gotPassword)
+	})
+}
+
+func TestStorage_GetText(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantText, err := s.CreateText(context.Background(), u.ID, "TextName", "TextData", "TextMeta")
+		require.NoError(t, err)
+
+		gotText, err := s.GetText(context.Background(), wantText.ID)
+		require.NoError(t, err)
+		require.Equal(t, wantText, gotText)
+	})
+
+	t.Run("unknown id", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotText, err := s.GetText(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.Error(t, err)
+		require.ErrorContains(t, err, "get text data id 00000000-0000-0000-0000-000000000000")
+		require.Nil(t, gotText)
+	})
+}
+
+func TestStorage_GetAllTexts(t *testing.T) {
+	s, err := NewStorage(context.Background(), testDSN)
+	require.NoError(t, err)
+	defer s.Close()
+
+	t.Run("positive test", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		u, err := s.CreateUser(context.Background(), "testUser", "testUser", "testSalt", "testPWD")
+		require.NoError(t, err)
+
+		wantText1, err := s.CreateText(context.Background(), u.ID, "TextName1", "TextData1", "TextMeta1")
+		require.NoError(t, err)
+
+		wantText2, err := s.CreateText(context.Background(), u.ID, "TextName2", "TextData2", "TextMeta2")
+		require.NoError(t, err)
+
+		wantTexts := []Text{*wantText1, *wantText2}
+
+		gotTexts, err := s.GetAllTexts(context.Background(), u.ID)
+		require.NoError(t, err)
+		require.Equal(t, wantTexts, gotTexts)
+	})
+
+	t.Run("unknown user_id", func(t *testing.T) {
+		defer truncateTable(t, s)
+
+		gotTexts, err := s.GetAllTexts(context.Background(), "00000000-0000-0000-0000-000000000000")
+		require.Error(t, err)
+		require.Nil(t, gotTexts)
+		require.ErrorContains(t, err, "user to user_id 00000000-0000-0000-0000-000000000000 don't have text data")
+	})
+}

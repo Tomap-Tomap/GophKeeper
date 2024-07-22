@@ -213,7 +213,7 @@ func (s *Storage) CreateFile(ctx context.Context, userID, name, pathToFile, meta
 }
 
 // GetFile возращает данные по сохраненному файлу
-func (s *Storage) GetFile(ctx context.Context, passwordID string) (*File, error) {
+func (s *Storage) GetFile(ctx context.Context, fileID string) (*File, error) {
 	query := `
 		SELECT *
 		FROM files
@@ -223,11 +223,11 @@ func (s *Storage) GetFile(ctx context.Context, passwordID string) (*File, error)
 	file := &File{}
 
 	err := retry(ctx, s.retryPolicy, func() error {
-		return s.conn.QueryRow(ctx, query, passwordID).Scan(file)
+		return s.conn.QueryRow(ctx, query, fileID).Scan(file)
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("get file id %s: %w", passwordID, err)
+		return nil, fmt.Errorf("get file id %s: %w", fileID, err)
 	}
 
 	return file, nil
@@ -275,4 +275,180 @@ func (s *Storage) GetAllFiles(ctx context.Context, userID string) ([]File, error
 	}
 
 	return files, nil
+}
+
+// CreateBank добавляет данные о банковской информации
+func (s *Storage) CreateBank(ctx context.Context, userID, name, banksData, meta string) (*Bank, error) {
+	query := `
+		WITH t AS (
+			INSERT INTO banks (user_id, name, banksdata, meta) VALUES ($1, $2, $3, $4)
+			RETURNING *
+		)
+		SELECT * FROM t;
+	`
+
+	bank := &Bank{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, userID, name, banksData, meta).Scan(bank)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("insert into banks table name %s: %w", name, err)
+	}
+
+	return bank, nil
+}
+
+// GetBank возращает данные по сохраненной банковской информации
+func (s *Storage) GetBank(ctx context.Context, bankID string) (*Bank, error) {
+	query := `
+		SELECT *
+		FROM banks
+		WHERE id = $1;
+	`
+
+	bank := &Bank{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, bankID).Scan(bank)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get bank data id %s: %w", bankID, err)
+	}
+
+	return bank, nil
+}
+
+// GetAllBanks возращает все данные по сохраненным банковским информациям
+func (s *Storage) GetAllBanks(ctx context.Context, userID string) ([]Bank, error) {
+	query := `
+		SELECT *
+		FROM banks
+		WHERE user_id = $1;
+	`
+
+	banks := make([]Bank, 0)
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		rows, err := s.conn.Query(ctx, query, userID)
+
+		if err != nil {
+			return err
+		}
+
+		defer rows.Close()
+
+		for rows.Next() {
+			var bank Bank
+			err := rows.Scan(&bank)
+
+			if err != nil {
+				return err
+			}
+
+			banks = append(banks, bank)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get banks user_id %s: %w", userID, err)
+	}
+
+	if len(banks) == 0 {
+		return nil, fmt.Errorf("user to user_id %s don't have bank data", userID)
+	}
+
+	return banks, nil
+}
+
+// CreateText добавляет данные о тексте
+func (s *Storage) CreateText(ctx context.Context, userID, name, text, meta string) (*Text, error) {
+	query := `
+		WITH t AS (
+			INSERT INTO texts (user_id, name, text, meta) VALUES ($1, $2, $3, $4)
+			RETURNING *
+		)
+		SELECT * FROM t;
+	`
+
+	t := &Text{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, userID, name, text, meta).Scan(t)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("insert into texts table name %s: %w", name, err)
+	}
+
+	return t, nil
+}
+
+// GetText возращает данные по сохраненному тексту
+func (s *Storage) GetText(ctx context.Context, textID string) (*Text, error) {
+	query := `
+		SELECT *
+		FROM texts
+		WHERE id = $1;
+	`
+
+	t := &Text{}
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		return s.conn.QueryRow(ctx, query, textID).Scan(t)
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get text data id %s: %w", textID, err)
+	}
+
+	return t, nil
+}
+
+// GetAllTexts возращает все данные по сохраненным текстовым данным
+func (s *Storage) GetAllTexts(ctx context.Context, userID string) ([]Text, error) {
+	query := `
+		SELECT *
+		FROM texts
+		WHERE user_id = $1;
+	`
+
+	texts := make([]Text, 0)
+
+	err := retry(ctx, s.retryPolicy, func() error {
+		rows, err := s.conn.Query(ctx, query, userID)
+
+		if err != nil {
+			return err
+		}
+
+		defer rows.Close()
+
+		for rows.Next() {
+			var text Text
+			err := rows.Scan(&text)
+
+			if err != nil {
+				return err
+			}
+
+			texts = append(texts, text)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("get texts user_id %s: %w", userID, err)
+	}
+
+	if len(texts) == 0 {
+		return nil, fmt.Errorf("user to user_id %s don't have text data", userID)
+	}
+
+	return texts, nil
 }
