@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	testDSN       = "host=localhost port=5433 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
+	testDSN       = "host=localhost port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
 	truncateQuery = "TRUNCATE TABLE users, banks, files, passwords, salts, texts;"
 )
 
