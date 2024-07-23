@@ -43,7 +43,7 @@ jobs:
       - name: Miration
         env:
           GOOSE_DRIVER: postgres
-          GOOSE_DBSTRING: "host=localhost port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
+          GOOSE_DBSTRING: "host=postgres port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
           GOOSE_MIGRATION_DIR: ./db/
         run: |
           goose up
