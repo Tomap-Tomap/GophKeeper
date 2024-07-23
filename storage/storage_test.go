@@ -5,18 +5,23 @@ package storage
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
+var TestDNS = os.Getenv("TEST_DSN")
+
 const (
-	testDSN       = "host=localhost port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
 	truncateQuery = "TRUNCATE TABLE users, banks, files, passwords, salts, texts;"
 )
 
 func TestNewStorage(t *testing.T) {
+	fmt.Println(TestDNS)
+
 	t.Run("error test", func(t *testing.T) {
 		_, err := NewStorage(context.Background(), "errorDSN")
 
@@ -25,7 +30,7 @@ func TestNewStorage(t *testing.T) {
 	})
 
 	t.Run("positive test", func(t *testing.T) {
-		s, err := NewStorage(context.Background(), testDSN)
+		s, err := NewStorage(context.Background(), TestDNS)
 
 		require.NoError(t, err)
 		defer s.Close()
@@ -34,7 +39,7 @@ func TestNewStorage(t *testing.T) {
 }
 
 func TestStorage_CreateUser(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -120,7 +125,7 @@ func TestStorage_CreateUser(t *testing.T) {
 }
 
 func TestStorage_GetUser(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -159,7 +164,7 @@ func truncateTable(t *testing.T, s *Storage) {
 }
 
 func TestStorage_CreatePassword(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -206,7 +211,7 @@ func TestStorage_CreatePassword(t *testing.T) {
 }
 
 func TestStorage_GetPassword(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -235,7 +240,7 @@ func TestStorage_GetPassword(t *testing.T) {
 }
 
 func TestStorage_GetAllPassword(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -269,7 +274,7 @@ func TestStorage_GetAllPassword(t *testing.T) {
 }
 
 func TestStorage_CreateFile(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -313,7 +318,7 @@ func TestStorage_CreateFile(t *testing.T) {
 }
 
 func TestStorage_GetFile(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -342,7 +347,7 @@ func TestStorage_GetFile(t *testing.T) {
 }
 
 func TestStorage_GetAllFiles(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -376,7 +381,7 @@ func TestStorage_GetAllFiles(t *testing.T) {
 }
 
 func TestStorage_CreateBank(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -420,7 +425,7 @@ func TestStorage_CreateBank(t *testing.T) {
 }
 
 func TestStorage_GetBank(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -449,7 +454,7 @@ func TestStorage_GetBank(t *testing.T) {
 }
 
 func TestStorage_GetAllBanks(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -483,7 +488,7 @@ func TestStorage_GetAllBanks(t *testing.T) {
 }
 
 func TestStorage_CreateText(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -527,7 +532,7 @@ func TestStorage_CreateText(t *testing.T) {
 }
 
 func TestStorage_GetText(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 
@@ -556,7 +561,7 @@ func TestStorage_GetText(t *testing.T) {
 }
 
 func TestStorage_GetAllTexts(t *testing.T) {
-	s, err := NewStorage(context.Background(), testDSN)
+	s, err := NewStorage(context.Background(), TestDNS)
 	require.NoError(t, err)
 	defer s.Close()
 

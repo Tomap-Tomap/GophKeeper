@@ -19,6 +19,8 @@ jobs:
   integrationtests:
     runs-on: ubuntu-latest    
     container: golang:1.22  
+    env:
+      DSN: "host=postgres port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
 
     services:
       postgres:
@@ -43,12 +45,14 @@ jobs:
       - name: Miration
         env:
           GOOSE_DRIVER: postgres
-          GOOSE_DBSTRING: "host=postgres port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
+          GOOSE_DBSTRING: $DSN
           GOOSE_MIGRATION_DIR: ./db/
         run: |
           goose up
 
       - name: Integration test
+        env:
+          TEST_DSN: $DSN
         run: |
           go test ./... -tags=integration -v        
     
