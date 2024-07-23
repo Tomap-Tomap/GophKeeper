@@ -45,14 +45,14 @@ jobs:
       - name: Miration
         env:
           GOOSE_DRIVER: postgres
-          GOOSE_DBSTRING: $DSN
+          GOOSE_DBSTRING: ${{ env.DSN }}
           GOOSE_MIGRATION_DIR: ./db/
         run: |
           goose up
 
       - name: Integration test
         env:
-          TEST_DSN: $DSN
+          TEST_DSN: ${{ env.DSN }}
         run: |
           go test ./... -tags=integration -v        
     
