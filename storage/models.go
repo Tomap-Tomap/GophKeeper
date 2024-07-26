@@ -8,6 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const (
+	updateAtField = "updateat"
+	loginField    = "login"
+	nameField     = "name"
+	metaField     = "meta"
+	userIDField   = "user_id"
+	passwordField = "password"
+)
+
 // User прдеставлявет собой структуру данных о пользователе
 type User struct {
 	ID       string
@@ -37,9 +46,9 @@ func (u *User) ScanRow(rows pgx.Rows) error {
 			}
 
 			u.ID = id.(string)
-		case "login":
+		case loginField:
 			u.Login = values[i].(string)
-		case "password":
+		case passwordField:
 			u.Password = strings.TrimSpace(values[i].(string))
 		case "salt":
 			u.Salt = strings.TrimSpace(values[i].(string))
@@ -81,7 +90,7 @@ func (p *Password) ScanRow(rows pgx.Rows) error {
 			}
 
 			p.ID = id.(string)
-		case "user_id":
+		case userIDField:
 			uuid := pgtype.UUID{
 				Bytes: values[i].([16]byte),
 				Valid: true,
@@ -93,15 +102,15 @@ func (p *Password) ScanRow(rows pgx.Rows) error {
 			}
 
 			p.UserID = id.(string)
-		case "name":
+		case nameField:
 			p.Name = values[i].(string)
-		case "login":
+		case loginField:
 			p.Login = values[i].(string)
-		case "password":
+		case passwordField:
 			p.Password = values[i].(string)
-		case "meta":
+		case metaField:
 			p.Meta = values[i].(string)
-		case "updateat":
+		case updateAtField:
 			p.UpdateAt = values[i].(time.Time)
 		}
 	}
@@ -140,7 +149,7 @@ func (f *File) ScanRow(rows pgx.Rows) error {
 			}
 
 			f.ID = id.(string)
-		case "user_id":
+		case userIDField:
 			uuid := pgtype.UUID{
 				Bytes: values[i].([16]byte),
 				Valid: true,
@@ -152,13 +161,13 @@ func (f *File) ScanRow(rows pgx.Rows) error {
 			}
 
 			f.UserID = id.(string)
-		case "name":
+		case nameField:
 			f.Name = values[i].(string)
 		case "pathtofile":
 			f.PathToFile = values[i].(string)
-		case "meta":
+		case metaField:
 			f.Meta = values[i].(string)
-		case "updateat":
+		case updateAtField:
 			f.UpdateAt = values[i].(time.Time)
 		}
 	}
@@ -197,7 +206,7 @@ func (f *Bank) ScanRow(rows pgx.Rows) error {
 			}
 
 			f.ID = id.(string)
-		case "user_id":
+		case userIDField:
 			uuid := pgtype.UUID{
 				Bytes: values[i].([16]byte),
 				Valid: true,
@@ -209,13 +218,13 @@ func (f *Bank) ScanRow(rows pgx.Rows) error {
 			}
 
 			f.UserID = id.(string)
-		case "name":
+		case nameField:
 			f.Name = values[i].(string)
 		case "banksdata":
 			f.BanksData = values[i].(string)
-		case "meta":
+		case metaField:
 			f.Meta = values[i].(string)
-		case "updateat":
+		case updateAtField:
 			f.UpdateAt = values[i].(time.Time)
 		}
 	}
@@ -254,7 +263,7 @@ func (f *Text) ScanRow(rows pgx.Rows) error {
 			}
 
 			f.ID = id.(string)
-		case "user_id":
+		case userIDField:
 			uuid := pgtype.UUID{
 				Bytes: values[i].([16]byte),
 				Valid: true,
@@ -266,13 +275,13 @@ func (f *Text) ScanRow(rows pgx.Rows) error {
 			}
 
 			f.UserID = id.(string)
-		case "name":
+		case nameField:
 			f.Name = values[i].(string)
 		case "text":
 			f.Text = values[i].(string)
-		case "meta":
+		case metaField:
 			f.Meta = values[i].(string)
-		case "updateat":
+		case updateAtField:
 			f.UpdateAt = values[i].(time.Time)
 		}
 	}

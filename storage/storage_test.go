@@ -101,7 +101,7 @@ func TestStorage_CreateUser(t *testing.T) {
 
 		gotUD, err := s.CreateUser(context.Background(), "TestLogin", "TestLogin", "TestSalt", "TestPassword")
 		require.Error(t, err)
-		require.ErrorContains(t, err, "insert into users table login")
+		require.ErrorContains(t, err, "user TestLogin already exists")
 		require.Nil(t, gotUD)
 	})
 
@@ -153,8 +153,7 @@ func TestStorage_GetUser(t *testing.T) {
 	t.Run("unknown user test", func(t *testing.T) {
 		defer truncateTable(t, s)
 		_, err := s.GetUser(context.Background(), "testUser", "testLogin")
-		require.Error(t, err)
-		require.ErrorContains(t, err, "get user")
+		require.ErrorContains(t, err, "unknown user testUser")
 	})
 }
 
@@ -205,7 +204,7 @@ func TestStorage_CreatePassword(t *testing.T) {
 			"PWDMeta",
 		)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "insert into passwords table name PWDName")
+		require.ErrorContains(t, err, "unknown user 00000000-0000-0000-0000-000000000000")
 		require.Nil(t, gotPassword)
 	})
 }

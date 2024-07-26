@@ -30,12 +30,12 @@ func Test_isConnectionException(t *testing.T) {
 func Test_retry2(t *testing.T) {
 	t.Run("test no error", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
 		}
-		got, err := retry2(context.Background(), rp, func() (int, error) {
+		got, err := Retry2(context.Background(), rp, func() (int, error) {
 			return 0, nil
 		})
 
@@ -45,12 +45,12 @@ func Test_retry2(t *testing.T) {
 
 	t.Run("test error", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
 		}
-		_, err := retry2(context.Background(), rp, func() (*int, error) {
+		_, err := Retry2(context.Background(), rp, func() (*int, error) {
 			return nil, &pgconn.PgError{Code: "02000"}
 		})
 
@@ -59,12 +59,12 @@ func Test_retry2(t *testing.T) {
 
 	t.Run("test error connection", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
 		}
-		_, err := retry2(context.Background(), rp, func() (*int, error) {
+		_, err := Retry2(context.Background(), rp, func() (*int, error) {
 			return nil, &pgconn.PgError{Code: "08000"}
 		})
 
@@ -73,7 +73,7 @@ func Test_retry2(t *testing.T) {
 
 	t.Run("test error resolved", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
@@ -89,7 +89,7 @@ func Test_retry2(t *testing.T) {
 			errConn = nil
 		}()
 
-		_, err := retry2(context.Background(), rp, func() (*int, error) {
+		_, err := Retry2(context.Background(), rp, func() (*int, error) {
 			mu.RLock()
 			defer mu.RUnlock()
 			return nil, errConn
@@ -100,7 +100,7 @@ func Test_retry2(t *testing.T) {
 
 	t.Run("test context done", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
@@ -109,7 +109,7 @@ func Test_retry2(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		_, err := retry2(ctx, rp, func() (*int, error) {
+		_, err := Retry2(ctx, rp, func() (*int, error) {
 			return nil, &pgconn.PgError{Code: "08000"}
 		})
 
@@ -120,12 +120,12 @@ func Test_retry2(t *testing.T) {
 func Test_retry(t *testing.T) {
 	t.Run("test no error", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
 		}
-		err := retry(context.Background(), rp, func() error {
+		err := Retry(context.Background(), rp, func() error {
 			return nil
 		})
 
@@ -134,12 +134,12 @@ func Test_retry(t *testing.T) {
 
 	t.Run("test error", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
 		}
-		err := retry(context.Background(), rp, func() error {
+		err := Retry(context.Background(), rp, func() error {
 			return &pgconn.PgError{Code: "02000"}
 		})
 
@@ -148,12 +148,12 @@ func Test_retry(t *testing.T) {
 
 	t.Run("test error connection", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
 		}
-		err := retry(context.Background(), rp, func() error {
+		err := Retry(context.Background(), rp, func() error {
 			return &pgconn.PgError{Code: "08000"}
 		})
 
@@ -162,7 +162,7 @@ func Test_retry(t *testing.T) {
 
 	t.Run("test error resolved", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
@@ -178,7 +178,7 @@ func Test_retry(t *testing.T) {
 			errConn = nil
 		}()
 
-		err := retry(context.Background(), rp, func() error {
+		err := Retry(context.Background(), rp, func() error {
 			mu.RLock()
 			defer mu.RUnlock()
 			return errConn
@@ -189,7 +189,7 @@ func Test_retry(t *testing.T) {
 
 	t.Run("test context done", func(t *testing.T) {
 		t.Parallel()
-		rp := retryPolicy{
+		rp := RetryPolicy{
 			retryCount: 3,
 			duration:   1,
 			increment:  2,
@@ -198,7 +198,7 @@ func Test_retry(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
 
-		err := retry(ctx, rp, func() error {
+		err := Retry(ctx, rp, func() error {
 			return &pgconn.PgError{Code: "08000"}
 		})
 

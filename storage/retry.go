@@ -9,22 +9,30 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type retryPolicy struct {
+// RetryPolicy определяет политику повторов
+type RetryPolicy struct {
 	retryCount int
 	duration   int
 	increment  int
 }
 
-func retry(ctx context.Context, rp retryPolicy, fn func() error) error {
+// NewRetryPolicy инициализирует новую политику повторов
+func NewRetryPolicy(retryCount, duration, increment int) *RetryPolicy {
+	return &RetryPolicy{retryCount, duration, increment}
+}
+
+// Retry выполняет запрос к БД с учетом retryPolicy при возникновении ошибки Class 08
+func Retry(ctx context.Context, rp RetryPolicy, fn func() error) error {
 	fnWithReturn := func() (struct{}, error) {
 		return struct{}{}, fn()
 	}
 
-	_, err := retry2(ctx, rp, fnWithReturn)
+	_, err := Retry2(ctx, rp, fnWithReturn)
 	return err
 }
 
-func retry2[T any](ctx context.Context, rp retryPolicy, fn func() (T, error)) (T, error) {
+// Retry2 выполняет запрос к БД с учетом retryPolicy при возникновении ошибки Class 08
+func Retry2[T any](ctx context.Context, rp RetryPolicy, fn func() (T, error)) (T, error) {
 	if val1, err := fn(); err == nil || !isConnectionException(err) {
 		return val1, err
 	}
