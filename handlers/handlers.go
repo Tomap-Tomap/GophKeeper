@@ -49,8 +49,8 @@ type Tokener interface {
 	GetToken(sub string) (string, error)
 }
 
-// ImageStore описывает методы для сохранения файла на сервере
-type ImageStore interface {
+// FileStore описывает методы для сохранения файла на сервере
+type FileStore interface {
 	Save(content bytes.Buffer) (string, error)
 	GetDBFiler(pathToFile string) (DBFiler, error)
 }
@@ -69,17 +69,17 @@ type GophKeeperHandler struct {
 	s  Storage
 	h  Hasher
 	t  Tokener
-	is ImageStore
+	fs FileStore
 }
 
 // NewGophKeeperHandler иницирует структуру GophKeeperHandler
-func NewGophKeeperHandler(s Storage, h Hasher, t Tokener, is ImageStore) *GophKeeperHandler {
+func NewGophKeeperHandler(s Storage, h Hasher, t Tokener, fs FileStore) *GophKeeperHandler {
 	return &GophKeeperHandler{
 		s:  s,
 		h:  h,
 		rp: *storage.NewRetryPolicy(1, 1, 1),
 		t:  t,
-		is: is,
+		fs: fs,
 	}
 }
 
@@ -564,7 +564,7 @@ func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer
 		}
 	}
 
-	pathToFile, err := gk.is.Save(fileData)
+	pathToFile, err := gk.fs.Save(fileData)
 
 	if err != nil {
 		return status.Errorf(codes.Internal, "save file for user %s", userID)
@@ -634,7 +634,7 @@ func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.Gop
 		return status.Errorf(codes.Internal, "get file %s: %s", fileID, err.Error())
 	}
 
-	filer, err := gk.is.GetDBFiler(file.PathToFile)
+	filer, err := gk.fs.GetDBFiler(file.PathToFile)
 
 	if err != nil {
 		return status.Errorf(codes.Internal, "get file %s: %s", fileID, err.Error())
@@ -706,7 +706,7 @@ func (gk *GophKeeperHandler) GetFiles(req *proto.GetFilesRequest, stream proto.G
 			return status.Errorf(codes.Internal, "get files %s: %s", userID, err.Error())
 		}
 
-		filer, err := gk.is.GetDBFiler(file.PathToFile)
+		filer, err := gk.fs.GetDBFiler(file.PathToFile)
 
 		if err != nil {
 			return status.Errorf(codes.Internal, "get files %s: %s", userID, err.Error())

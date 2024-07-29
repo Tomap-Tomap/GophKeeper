@@ -27,13 +27,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func RuneGPRCTestServer(t *testing.T, smo *StorageMockedObject, hmo *HasherMockedObject, tmo *TokenerMockerdObject, ismo *ImageStoreMockerObject) (addr string, stopFunc func()) {
+func RuneGPRCTestServer(t *testing.T, smo *StorageMockedObject, hmo *HasherMockedObject, tmo *TokenerMockerdObject, fsmo *FileStoreMockerObject) (addr string, stopFunc func()) {
 	lis, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 
 	s := grpc.NewServer()
 
-	proto.RegisterGophKeeperServer(s, NewGophKeeperHandler(smo, hmo, tmo, ismo))
+	proto.RegisterGophKeeperServer(s, NewGophKeeperHandler(smo, hmo, tmo, fsmo))
 
 	go func() {
 		if err := s.Serve(lis); err != nil {
@@ -67,7 +67,7 @@ type SuiteGK struct {
 	smo        *StorageMockedObject
 	hmo        *HasherMockedObject
 	tmo        *TokenerMockerdObject
-	ismo       *ImageStoreMockerObject
+	fsmo       *FileStoreMockerObject
 	client     proto.GophKeeperClient
 	stopClient func() error
 	stopServer func()
@@ -109,16 +109,16 @@ func (s *SuiteGK) SetupSuite() {
 	smo := new(StorageMockedObject)
 	hmo := new(HasherMockedObject)
 	tmo := new(TokenerMockerdObject)
-	ismo := new(ImageStoreMockerObject)
+	fsmo := new(FileStoreMockerObject)
 
-	addr, stopServer := RuneGPRCTestServer(s.T(), smo, hmo, tmo, ismo)
+	addr, stopServer := RuneGPRCTestServer(s.T(), smo, hmo, tmo, fsmo)
 
 	client, closeClient := CreateGRPCTestClient(s.T(), addr)
 
 	s.smo = smo
 	s.hmo = hmo
 	s.tmo = tmo
-	s.ismo = ismo
+	s.fsmo = fsmo
 	s.client = client
 	s.stopClient = closeClient
 	s.stopServer = stopServer
@@ -242,7 +242,7 @@ func (s *SuiteGK) TearDownSubTest() {
 	s.hmo.AssertExpectations(s.T())
 	s.smo.AssertExpectations(s.T())
 	s.tmo.AssertExpectations(s.T())
-	s.ismo.AssertExpectations(s.T())
+	s.fsmo.AssertExpectations(s.T())
 
 	for len(s.hmo.ExpectedCalls) != 0 {
 		s.hmo.ExpectedCalls[0].Unset()
@@ -256,8 +256,8 @@ func (s *SuiteGK) TearDownSubTest() {
 		s.tmo.ExpectedCalls[0].Unset()
 	}
 
-	for len(s.ismo.ExpectedCalls) != 0 {
-		s.ismo.ExpectedCalls[0].Unset()
+	for len(s.fsmo.ExpectedCalls) != 0 {
+		s.fsmo.ExpectedCalls[0].Unset()
 	}
 }
 
@@ -1017,7 +1017,7 @@ func (s *SuiteGK) TestCreateFileErrors() {
 			err:  fmt.Sprintf("save file for user %s", s.testUserID),
 			code: codes.Internal,
 			setupMock: func() {
-				s.ismo.On("Save", s.testBuffer).Return("", errors.New("save file error"))
+				s.fsmo.On("Save", s.testBuffer).Return("", errors.New("save file error"))
 			},
 		},
 		{
@@ -1025,7 +1025,7 @@ func (s *SuiteGK) TestCreateFileErrors() {
 			err:  fmt.Sprintf("create file for user %s", s.testUserID),
 			code: codes.Internal,
 			setupMock: func() {
-				s.ismo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
+				s.fsmo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
 
 				s.smo.On("CreateFile", s.testUserID, s.testName, s.testPathToFile, s.testMeta).
 					Return(nil, &pgconn.PgError{Code: "08000"})
@@ -1036,7 +1036,7 @@ func (s *SuiteGK) TestCreateFileErrors() {
 			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
 			code: codes.Unknown,
 			setupMock: func() {
-				s.ismo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
+				s.fsmo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
 
 				s.smo.On("CreateFile", s.testUserID, s.testName, s.testPathToFile, s.testMeta).
 					Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
@@ -1126,7 +1126,7 @@ func (s *SuiteGK) TestGetFileErrors() {
 					s.testFileID,
 				).Return(s.wantFile, nil)
 
-				s.ismo.On("GetDBFiler", s.testPathToFile).Return(nil, errors.New("test"))
+				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(nil, errors.New("test"))
 
 				return nil
 			},
@@ -1142,7 +1142,7 @@ func (s *SuiteGK) TestGetFileErrors() {
 				).Return(s.wantFile, nil)
 
 				fmo := new(DBFilerMocketObject)
-				s.ismo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
+				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
 
 				fmo.On("GetChunck").Return(nil, errors.New("test error"))
 				fmo.On("Close")
@@ -1224,7 +1224,7 @@ func (s *SuiteGK) TestGetFilesErrors() {
 					s.testUserID,
 				).Return([]storage.File{*s.wantFile}, nil)
 
-				s.ismo.On("GetDBFiler", s.testPathToFile).Return(nil, errors.New("test"))
+				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(nil, errors.New("test"))
 
 				return nil
 			},
@@ -1240,7 +1240,7 @@ func (s *SuiteGK) TestGetFilesErrors() {
 				).Return([]storage.File{*s.wantFile}, nil)
 
 				fmo := new(DBFilerMocketObject)
-				s.ismo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
+				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
 
 				fmo.On("GetChunck").Return(nil, errors.New("test error"))
 				fmo.On("Close")
@@ -1453,7 +1453,7 @@ func (s *SuiteGK) TestPositive() {
 	})
 
 	s.Run("test create file", func() {
-		s.ismo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
+		s.fsmo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
 
 		s.smo.On("CreateFile", s.testUserID, s.testName, s.testPathToFile, s.testMeta).
 			Return(s.wantFile, nil)
@@ -1495,7 +1495,7 @@ func (s *SuiteGK) TestPositive() {
 		s.smo.On("GetFile", s.testFileID).Return(s.wantFile, nil)
 
 		fmo := new(DBFilerMocketObject)
-		s.ismo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
+		s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
 
 		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
 		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()
@@ -1530,8 +1530,8 @@ func (s *SuiteGK) TestPositive() {
 			}, nil)
 
 		fmo := new(DBFilerMocketObject)
-		s.ismo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil).Once()
-		s.ismo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil).Once()
+		s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil).Once()
+		s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil).Once()
 
 		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
 		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()

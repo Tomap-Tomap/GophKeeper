@@ -184,18 +184,18 @@ func (t *TokenerMockerdObject) GetToken(sub string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-type ImageStoreMockerObject struct {
+type FileStoreMockerObject struct {
 	mock.Mock
 }
 
-func (is *ImageStoreMockerObject) Save(content bytes.Buffer) (string, error) {
-	args := is.Called(content)
+func (fs *FileStoreMockerObject) Save(content bytes.Buffer) (string, error) {
+	args := fs.Called(content)
 
 	return args.String(0), args.Error(1)
 }
 
-func (is *ImageStoreMockerObject) GetDBFiler(pathToFile string) (DBFiler, error) {
-	args := is.Called(pathToFile)
+func (fs *FileStoreMockerObject) GetDBFiler(pathToFile string) (DBFiler, error) {
+	args := fs.Called(pathToFile)
 
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
