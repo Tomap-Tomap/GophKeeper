@@ -2,7 +2,6 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -10,10 +9,15 @@ import (
 
 	"github.com/Tomap-Tomap/GophKeeper/proto"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
+	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const userIDHeader = "user_id"
 
 // Storage описывает методы для работы с неким хранилищем
 type Storage interface {
@@ -39,8 +43,8 @@ type Storage interface {
 
 // Hasher описывает методы для генерации хэшей
 type Hasher interface {
-	GenerateSalt() (string, error)
-	GetHash(str string) (string, error)
+	GenerateSalt(len int) (string, error)
+	GetHash(str string) string
 	GetHashWithSalt(str, salt string) (string, error)
 }
 
@@ -51,14 +55,8 @@ type Tokener interface {
 
 // FileStore описывает методы для сохранения файла на сервере
 type FileStore interface {
-	Save(content bytes.Buffer) (string, error)
-	GetDBFiler(pathToFile string) (DBFiler, error)
-}
-
-// DBFiler интерфейс описывающий объекты для чтения файлов
-type DBFiler interface {
-	GetChunck() ([]byte, error)
-	Close()
+	CreateDBFile(fileName string) (storage.DBFiler, error)
+	GetDBFile(fileName string) (storage.DBFiler, error)
 }
 
 // GophKeeperHandler структура реализующая работу grpc сервера
@@ -103,13 +101,9 @@ func (gk *GophKeeperHandler) Register(ctx context.Context, req *proto.RegisterRe
 		return nil, err
 	}
 
-	loginHash, err := gk.h.GetHash(login)
+	loginHash := gk.h.GetHash(login)
 
-	if err != nil {
-		return nil, status.Error(codes.Internal, "generate hash")
-	}
-
-	salt, err := gk.h.GenerateSalt()
+	salt, err := gk.h.GenerateSalt(75)
 
 	if err != nil {
 		return nil, status.Error(codes.Internal, "generate salt")
@@ -163,11 +157,7 @@ func (gk *GophKeeperHandler) Auth(ctx context.Context, req *proto.AuthRequest) (
 		return nil, err
 	}
 
-	loginHash, err := gk.h.GetHash(login)
-
-	if err != nil {
-		return nil, status.Error(codes.Internal, "generate hash")
-	}
+	loginHash := gk.h.GetHash(login)
 
 	user, err := storage.Retry2(ctx, gk.rp, func() (*storage.User, error) {
 		return gk.s.GetUser(ctx, login, loginHash)
@@ -203,10 +193,10 @@ func (gk *GophKeeperHandler) Auth(ctx context.Context, req *proto.AuthRequest) (
 
 // CreatePassword обработчик добавления нового сохраненного пароля пользователя
 func (gk *GophKeeperHandler) CreatePassword(ctx context.Context, req *proto.CreatePasswordRequest) (*proto.CreatePasswordResponse, error) {
-	userID := strings.TrimSpace(req.GetUserID())
+	userID, err := getUserIDFromContext(ctx)
 
-	if userID == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty UserID")
+	if err != nil {
+		return nil, status.Error(codes.Internal, "cannot get user id")
 	}
 
 	pwd, err := storage.Retry2(ctx, gk.rp, func() (*storage.Password, error) {
@@ -259,7 +249,6 @@ func (gk *GophKeeperHandler) GetPassword(ctx context.Context, req *proto.GetPass
 	return &proto.GetPasswordResponse{
 		Password: &proto.Password{
 			Id:       pwd.ID,
-			UserID:   pwd.UserID,
 			Name:     pwd.Name,
 			Login:    pwd.Login,
 			Password: pwd.Password,
@@ -270,11 +259,11 @@ func (gk *GophKeeperHandler) GetPassword(ctx context.Context, req *proto.GetPass
 }
 
 // GetPasswords обработчик получения всех паролей пользователя
-func (gk *GophKeeperHandler) GetPasswords(ctx context.Context, req *proto.GetPasswordsRequest) (*proto.GetPasswordsResponse, error) {
-	userID := strings.TrimSpace(req.GetUserID())
+func (gk *GophKeeperHandler) GetPasswords(ctx context.Context, _ *empty.Empty) (*proto.GetPasswordsResponse, error) {
+	userID, err := getUserIDFromContext(ctx)
 
-	if userID == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty UserID")
+	if err != nil {
+		return nil, status.Error(codes.Internal, "cannot get user id")
 	}
 
 	pwds, err := storage.Retry2(ctx, gk.rp, func() ([]storage.Password, error) {
@@ -298,7 +287,6 @@ func (gk *GophKeeperHandler) GetPasswords(ctx context.Context, req *proto.GetPas
 	for _, val := range pwds {
 		protoPWDs = append(protoPWDs, &proto.Password{
 			Id:       val.ID,
-			UserID:   val.UserID,
 			Name:     val.Name,
 			Login:    val.Login,
 			Password: val.Password,
@@ -314,7 +302,11 @@ func (gk *GophKeeperHandler) GetPasswords(ctx context.Context, req *proto.GetPas
 
 // CreateBank обработчик добавления новой банковской информации
 func (gk *GophKeeperHandler) CreateBank(ctx context.Context, req *proto.CreateBankRequest) (*proto.CreateBankResponse, error) {
-	userID := strings.TrimSpace(req.GetUserID())
+	userID, err := getUserIDFromContext(ctx)
+
+	if err != nil {
+		return nil, status.Error(codes.Internal, "cannot get user id")
+	}
 
 	if userID == "" {
 		return nil, status.Error(codes.InvalidArgument, "empty UserID")
@@ -369,7 +361,6 @@ func (gk *GophKeeperHandler) GetBank(ctx context.Context, req *proto.GetBankRequ
 	return &proto.GetBankResponse{
 		Bank: &proto.Bank{
 			Id:        bank.ID,
-			UserID:    bank.UserID,
 			Name:      bank.Name,
 			BanksData: bank.BanksData,
 			Meta:      bank.Meta,
@@ -379,11 +370,11 @@ func (gk *GophKeeperHandler) GetBank(ctx context.Context, req *proto.GetBankRequ
 }
 
 // GetBanks обработчик получения всех баковских данных
-func (gk *GophKeeperHandler) GetBanks(ctx context.Context, req *proto.GetBanksRequest) (*proto.GetBanksResponse, error) {
-	userID := strings.TrimSpace(req.GetUserID())
+func (gk *GophKeeperHandler) GetBanks(ctx context.Context, _ *empty.Empty) (*proto.GetBanksResponse, error) {
+	userID, err := getUserIDFromContext(ctx)
 
-	if userID == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty UserID")
+	if err != nil {
+		return nil, status.Error(codes.Internal, "cannot get user id")
 	}
 
 	banks, err := storage.Retry2(ctx, gk.rp, func() ([]storage.Bank, error) {
@@ -407,7 +398,6 @@ func (gk *GophKeeperHandler) GetBanks(ctx context.Context, req *proto.GetBanksRe
 	for _, val := range banks {
 		protoBanks = append(protoBanks, &proto.Bank{
 			Id:        val.ID,
-			UserID:    val.UserID,
 			Name:      val.Name,
 			BanksData: val.BanksData,
 			Meta:      val.Meta,
@@ -422,10 +412,10 @@ func (gk *GophKeeperHandler) GetBanks(ctx context.Context, req *proto.GetBanksRe
 
 // CreateText обработчик добавления новой банковской информации
 func (gk *GophKeeperHandler) CreateText(ctx context.Context, req *proto.CreateTextRequest) (*proto.CreateTextResponse, error) {
-	userID := strings.TrimSpace(req.GetUserID())
+	userID, err := getUserIDFromContext(ctx)
 
-	if userID == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty UserID")
+	if err != nil {
+		return nil, status.Error(codes.Internal, "cannot get user id")
 	}
 
 	text, err := storage.Retry2(ctx, gk.rp, func() (*storage.Text, error) {
@@ -477,7 +467,6 @@ func (gk *GophKeeperHandler) GetText(ctx context.Context, req *proto.GetTextRequ
 	return &proto.GetTextResponse{
 		Text: &proto.Text{
 			Id:       text.ID,
-			UserID:   text.UserID,
 			Name:     text.Name,
 			Text:     text.Text,
 			Meta:     text.Meta,
@@ -487,11 +476,11 @@ func (gk *GophKeeperHandler) GetText(ctx context.Context, req *proto.GetTextRequ
 }
 
 // GetTexts обработчик получения всех баковских данных
-func (gk *GophKeeperHandler) GetTexts(ctx context.Context, req *proto.GetTextsRequest) (*proto.GetTextsResponse, error) {
-	userID := strings.TrimSpace(req.GetUserID())
+func (gk *GophKeeperHandler) GetTexts(ctx context.Context, _ *empty.Empty) (*proto.GetTextsResponse, error) {
+	userID, err := getUserIDFromContext(ctx)
 
-	if userID == "" {
-		return nil, status.Error(codes.InvalidArgument, "empty UserID")
+	if err != nil {
+		return nil, status.Error(codes.Internal, "cannot get user id")
 	}
 
 	texts, err := storage.Retry2(ctx, gk.rp, func() ([]storage.Text, error) {
@@ -515,7 +504,6 @@ func (gk *GophKeeperHandler) GetTexts(ctx context.Context, req *proto.GetTextsRe
 	for _, val := range texts {
 		protoTexts = append(protoTexts, &proto.Text{
 			Id:       val.ID,
-			UserID:   val.UserID,
 			Name:     val.Name,
 			Text:     val.Text,
 			Meta:     val.Meta,
@@ -536,38 +524,44 @@ func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer
 		return status.Error(codes.Unknown, "cannot receive file info")
 	}
 
-	userID := strings.TrimSpace(req.GetFileInfo().GetUserID())
+	userID, err := getUserIDFromContext(stream.Context())
 
-	if userID == "" {
-		return status.Error(codes.InvalidArgument, "empty UserID")
+	if err != nil {
+		return status.Error(codes.Internal, "cannot get user id")
 	}
 
 	name := req.GetFileInfo().Name
 	meta := req.GetFileInfo().Meta
 
-	fileData := bytes.Buffer{}
+	fileName, err := uuid.NewRandom()
+
+	if err != nil {
+		return status.Errorf(codes.Internal, "cannot generate file name: %s", err.Error())
+	}
+
+	dbf, err := gk.fs.CreateDBFile(fileName.String())
+
+	if err != nil {
+		return status.Errorf(codes.Internal, "create db file for user %s: %s", userID, err.Error())
+	}
+
+	defer dbf.Close()
 
 	for {
 		req, err := stream.Recv()
 
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return status.Error(codes.Unknown, "cannot receive content")
 		}
 
-		_, err = fileData.Write(req.GetContent())
+		_, err = dbf.Write(req.GetContent())
 
 		if err != nil {
-			return status.Errorf(codes.Internal, "write content on buffer: %s", err.Error())
+			return status.Errorf(codes.Internal, "write file for user %s: %s", userID, err.Error())
 		}
-	}
-
-	pathToFile, err := gk.fs.Save(fileData)
-
-	if err != nil {
-		return status.Errorf(codes.Internal, "save file for user %s", userID)
 	}
 
 	file, err := storage.Retry2(stream.Context(), gk.rp, func() (*storage.File, error) {
@@ -575,7 +569,7 @@ func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer
 			stream.Context(),
 			userID,
 			name,
-			pathToFile,
+			fileName.String(),
 			meta,
 		)
 	})
@@ -622,7 +616,6 @@ func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.Gop
 		Data: &proto.GetFileResponse_FileInfo{
 			FileInfo: &proto.File{
 				Id:       file.ID,
-				UserID:   file.UserID,
 				Name:     file.Name,
 				Meta:     file.Meta,
 				UpdateAt: timestamppb.New(file.UpdateAt),
@@ -634,7 +627,7 @@ func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.Gop
 		return status.Errorf(codes.Internal, "get file %s: %s", fileID, err.Error())
 	}
 
-	filer, err := gk.fs.GetDBFiler(file.PathToFile)
+	filer, err := gk.fs.GetDBFile(file.PathToFile)
 
 	if err != nil {
 		return status.Errorf(codes.Internal, "get file %s: %s", fileID, err.Error())
@@ -644,7 +637,7 @@ func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.Gop
 	for {
 		content, err := filer.GetChunck()
 
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -666,11 +659,11 @@ func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.Gop
 }
 
 // GetFiles обработчик получения всех файлов пользователя
-func (gk *GophKeeperHandler) GetFiles(req *proto.GetFilesRequest, stream proto.GophKeeper_GetFilesServer) error {
-	userID := strings.TrimSpace(req.GetUserID())
+func (gk *GophKeeperHandler) GetFiles(_ *empty.Empty, stream proto.GophKeeper_GetFilesServer) error {
+	userID, err := getUserIDFromContext(stream.Context())
 
-	if userID == "" {
-		return status.Error(codes.InvalidArgument, "empty UserID")
+	if err != nil {
+		return status.Error(codes.Internal, "cannot get user id")
 	}
 
 	files, err := storage.Retry2(stream.Context(), gk.rp, func() ([]storage.File, error) {
@@ -694,7 +687,6 @@ func (gk *GophKeeperHandler) GetFiles(req *proto.GetFilesRequest, stream proto.G
 			Data: &proto.GetFilesResponse_FileInfo{
 				FileInfo: &proto.File{
 					Id:       file.ID,
-					UserID:   file.UserID,
 					Name:     file.Name,
 					Meta:     file.Meta,
 					UpdateAt: timestamppb.New(file.UpdateAt),
@@ -706,7 +698,7 @@ func (gk *GophKeeperHandler) GetFiles(req *proto.GetFilesRequest, stream proto.G
 			return status.Errorf(codes.Internal, "get files %s: %s", userID, err.Error())
 		}
 
-		filer, err := gk.fs.GetDBFiler(file.PathToFile)
+		filer, err := gk.fs.GetDBFile(file.PathToFile)
 
 		if err != nil {
 			return status.Errorf(codes.Internal, "get files %s: %s", userID, err.Error())
@@ -716,7 +708,7 @@ func (gk *GophKeeperHandler) GetFiles(req *proto.GetFilesRequest, stream proto.G
 		for {
 			content, err := filer.GetChunck()
 
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			if err != nil {
@@ -736,4 +728,20 @@ func (gk *GophKeeperHandler) GetFiles(req *proto.GetFilesRequest, stream proto.G
 	}
 
 	return nil
+}
+
+func getUserIDFromContext(ctx context.Context) (string, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+
+	if !ok {
+		return "", status.Error(codes.Unauthenticated, "missing metadata")
+	}
+
+	uid := md.Get(userIDHeader)
+
+	if len(uid) == 0 {
+		return "", status.Errorf(codes.Unauthenticated, "missing %s", userIDHeader)
+	}
+
+	return uid[0], nil
 }

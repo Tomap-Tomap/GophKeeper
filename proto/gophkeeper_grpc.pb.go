@@ -8,6 +8,7 @@ package proto
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -43,16 +44,16 @@ type GophKeeperClient interface {
 	Auth(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResponse, error)
 	CreatePassword(ctx context.Context, in *CreatePasswordRequest, opts ...grpc.CallOption) (*CreatePasswordResponse, error)
 	GetPassword(ctx context.Context, in *GetPasswordRequest, opts ...grpc.CallOption) (*GetPasswordResponse, error)
-	GetPasswords(ctx context.Context, in *GetPasswordsRequest, opts ...grpc.CallOption) (*GetPasswordsResponse, error)
+	GetPasswords(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetPasswordsResponse, error)
 	CreateFile(ctx context.Context, opts ...grpc.CallOption) (GophKeeper_CreateFileClient, error)
 	GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (GophKeeper_GetFileClient, error)
-	GetFiles(ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption) (GophKeeper_GetFilesClient, error)
+	GetFiles(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (GophKeeper_GetFilesClient, error)
 	CreateBank(ctx context.Context, in *CreateBankRequest, opts ...grpc.CallOption) (*CreateBankResponse, error)
 	GetBank(ctx context.Context, in *GetBankRequest, opts ...grpc.CallOption) (*GetBankResponse, error)
-	GetBanks(ctx context.Context, in *GetBanksRequest, opts ...grpc.CallOption) (*GetBanksResponse, error)
+	GetBanks(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetBanksResponse, error)
 	CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*CreateTextResponse, error)
 	GetText(ctx context.Context, in *GetTextRequest, opts ...grpc.CallOption) (*GetTextResponse, error)
-	GetTexts(ctx context.Context, in *GetTextsRequest, opts ...grpc.CallOption) (*GetTextsResponse, error)
+	GetTexts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetTextsResponse, error)
 }
 
 type gophKeeperClient struct {
@@ -99,7 +100,7 @@ func (c *gophKeeperClient) GetPassword(ctx context.Context, in *GetPasswordReque
 	return out, nil
 }
 
-func (c *gophKeeperClient) GetPasswords(ctx context.Context, in *GetPasswordsRequest, opts ...grpc.CallOption) (*GetPasswordsResponse, error) {
+func (c *gophKeeperClient) GetPasswords(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetPasswordsResponse, error) {
 	out := new(GetPasswordsResponse)
 	err := c.cc.Invoke(ctx, GophKeeper_GetPasswords_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -174,7 +175,7 @@ func (x *gophKeeperGetFileClient) Recv() (*GetFileResponse, error) {
 	return m, nil
 }
 
-func (c *gophKeeperClient) GetFiles(ctx context.Context, in *GetFilesRequest, opts ...grpc.CallOption) (GophKeeper_GetFilesClient, error) {
+func (c *gophKeeperClient) GetFiles(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (GophKeeper_GetFilesClient, error) {
 	stream, err := c.cc.NewStream(ctx, &GophKeeper_ServiceDesc.Streams[2], GophKeeper_GetFiles_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
@@ -224,7 +225,7 @@ func (c *gophKeeperClient) GetBank(ctx context.Context, in *GetBankRequest, opts
 	return out, nil
 }
 
-func (c *gophKeeperClient) GetBanks(ctx context.Context, in *GetBanksRequest, opts ...grpc.CallOption) (*GetBanksResponse, error) {
+func (c *gophKeeperClient) GetBanks(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetBanksResponse, error) {
 	out := new(GetBanksResponse)
 	err := c.cc.Invoke(ctx, GophKeeper_GetBanks_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -251,7 +252,7 @@ func (c *gophKeeperClient) GetText(ctx context.Context, in *GetTextRequest, opts
 	return out, nil
 }
 
-func (c *gophKeeperClient) GetTexts(ctx context.Context, in *GetTextsRequest, opts ...grpc.CallOption) (*GetTextsResponse, error) {
+func (c *gophKeeperClient) GetTexts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetTextsResponse, error) {
 	out := new(GetTextsResponse)
 	err := c.cc.Invoke(ctx, GophKeeper_GetTexts_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -268,16 +269,16 @@ type GophKeeperServer interface {
 	Auth(context.Context, *AuthRequest) (*AuthResponse, error)
 	CreatePassword(context.Context, *CreatePasswordRequest) (*CreatePasswordResponse, error)
 	GetPassword(context.Context, *GetPasswordRequest) (*GetPasswordResponse, error)
-	GetPasswords(context.Context, *GetPasswordsRequest) (*GetPasswordsResponse, error)
+	GetPasswords(context.Context, *empty.Empty) (*GetPasswordsResponse, error)
 	CreateFile(GophKeeper_CreateFileServer) error
 	GetFile(*GetFileRequest, GophKeeper_GetFileServer) error
-	GetFiles(*GetFilesRequest, GophKeeper_GetFilesServer) error
+	GetFiles(*empty.Empty, GophKeeper_GetFilesServer) error
 	CreateBank(context.Context, *CreateBankRequest) (*CreateBankResponse, error)
 	GetBank(context.Context, *GetBankRequest) (*GetBankResponse, error)
-	GetBanks(context.Context, *GetBanksRequest) (*GetBanksResponse, error)
+	GetBanks(context.Context, *empty.Empty) (*GetBanksResponse, error)
 	CreateText(context.Context, *CreateTextRequest) (*CreateTextResponse, error)
 	GetText(context.Context, *GetTextRequest) (*GetTextResponse, error)
-	GetTexts(context.Context, *GetTextsRequest) (*GetTextsResponse, error)
+	GetTexts(context.Context, *empty.Empty) (*GetTextsResponse, error)
 	mustEmbedUnimplementedGophKeeperServer()
 }
 
@@ -297,7 +298,7 @@ func (UnimplementedGophKeeperServer) CreatePassword(context.Context, *CreatePass
 func (UnimplementedGophKeeperServer) GetPassword(context.Context, *GetPasswordRequest) (*GetPasswordResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPassword not implemented")
 }
-func (UnimplementedGophKeeperServer) GetPasswords(context.Context, *GetPasswordsRequest) (*GetPasswordsResponse, error) {
+func (UnimplementedGophKeeperServer) GetPasswords(context.Context, *empty.Empty) (*GetPasswordsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPasswords not implemented")
 }
 func (UnimplementedGophKeeperServer) CreateFile(GophKeeper_CreateFileServer) error {
@@ -306,7 +307,7 @@ func (UnimplementedGophKeeperServer) CreateFile(GophKeeper_CreateFileServer) err
 func (UnimplementedGophKeeperServer) GetFile(*GetFileRequest, GophKeeper_GetFileServer) error {
 	return status.Errorf(codes.Unimplemented, "method GetFile not implemented")
 }
-func (UnimplementedGophKeeperServer) GetFiles(*GetFilesRequest, GophKeeper_GetFilesServer) error {
+func (UnimplementedGophKeeperServer) GetFiles(*empty.Empty, GophKeeper_GetFilesServer) error {
 	return status.Errorf(codes.Unimplemented, "method GetFiles not implemented")
 }
 func (UnimplementedGophKeeperServer) CreateBank(context.Context, *CreateBankRequest) (*CreateBankResponse, error) {
@@ -315,7 +316,7 @@ func (UnimplementedGophKeeperServer) CreateBank(context.Context, *CreateBankRequ
 func (UnimplementedGophKeeperServer) GetBank(context.Context, *GetBankRequest) (*GetBankResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBank not implemented")
 }
-func (UnimplementedGophKeeperServer) GetBanks(context.Context, *GetBanksRequest) (*GetBanksResponse, error) {
+func (UnimplementedGophKeeperServer) GetBanks(context.Context, *empty.Empty) (*GetBanksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBanks not implemented")
 }
 func (UnimplementedGophKeeperServer) CreateText(context.Context, *CreateTextRequest) (*CreateTextResponse, error) {
@@ -324,7 +325,7 @@ func (UnimplementedGophKeeperServer) CreateText(context.Context, *CreateTextRequ
 func (UnimplementedGophKeeperServer) GetText(context.Context, *GetTextRequest) (*GetTextResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetText not implemented")
 }
-func (UnimplementedGophKeeperServer) GetTexts(context.Context, *GetTextsRequest) (*GetTextsResponse, error) {
+func (UnimplementedGophKeeperServer) GetTexts(context.Context, *empty.Empty) (*GetTextsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTexts not implemented")
 }
 func (UnimplementedGophKeeperServer) mustEmbedUnimplementedGophKeeperServer() {}
@@ -413,7 +414,7 @@ func _GophKeeper_GetPassword_Handler(srv interface{}, ctx context.Context, dec f
 }
 
 func _GophKeeper_GetPasswords_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetPasswordsRequest)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -425,7 +426,7 @@ func _GophKeeper_GetPasswords_Handler(srv interface{}, ctx context.Context, dec 
 		FullMethod: GophKeeper_GetPasswords_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GophKeeperServer).GetPasswords(ctx, req.(*GetPasswordsRequest))
+		return srv.(GophKeeperServer).GetPasswords(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -478,7 +479,7 @@ func (x *gophKeeperGetFileServer) Send(m *GetFileResponse) error {
 }
 
 func _GophKeeper_GetFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(GetFilesRequest)
+	m := new(empty.Empty)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
@@ -535,7 +536,7 @@ func _GophKeeper_GetBank_Handler(srv interface{}, ctx context.Context, dec func(
 }
 
 func _GophKeeper_GetBanks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetBanksRequest)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -547,7 +548,7 @@ func _GophKeeper_GetBanks_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: GophKeeper_GetBanks_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GophKeeperServer).GetBanks(ctx, req.(*GetBanksRequest))
+		return srv.(GophKeeperServer).GetBanks(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -589,7 +590,7 @@ func _GophKeeper_GetText_Handler(srv interface{}, ctx context.Context, dec func(
 }
 
 func _GophKeeper_GetTexts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetTextsRequest)
+	in := new(empty.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -601,7 +602,7 @@ func _GophKeeper_GetTexts_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: GophKeeper_GetTexts_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(GophKeeperServer).GetTexts(ctx, req.(*GetTextsRequest))
+		return srv.(GophKeeperServer).GetTexts(ctx, req.(*empty.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }

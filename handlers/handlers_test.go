@@ -23,7 +23,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -81,6 +83,7 @@ type SuiteGK struct {
 	wantProtoText     *proto.Text
 	wantFile          *storage.File
 	wantProtoFile     *proto.File
+	incomingContext   context.Context
 
 	testBuffer bytes.Buffer
 	testBatch1 []byte
@@ -141,6 +144,8 @@ func (s *SuiteGK) SetupSuite() {
 	s.testText = "TestText"
 	s.testPathToFile = "TestPathToFile"
 
+	s.incomingContext = metadata.NewOutgoingContext(context.Background(), metadata.Pairs("user_id", s.testUserID))
+
 	s.wantUser = &storage.User{
 		ID:       s.testUserID,
 		Login:    s.testLogin,
@@ -151,7 +156,6 @@ func (s *SuiteGK) SetupSuite() {
 	updateAt := time.Now()
 	s.wantPassword = &storage.Password{
 		ID:       s.testPasswordID,
-		UserID:   s.testUserID,
 		Name:     s.testName,
 		Login:    s.testLogin,
 		Password: s.testPassword,
@@ -160,7 +164,6 @@ func (s *SuiteGK) SetupSuite() {
 	}
 	s.wantProtoPassword = &proto.Password{
 		Id:       s.testPasswordID,
-		UserID:   s.testUserID,
 		Name:     s.testName,
 		Login:    s.testLogin,
 		Password: s.testPassword,
@@ -178,7 +181,6 @@ func (s *SuiteGK) SetupSuite() {
 	}
 	s.wantProtoBank = &proto.Bank{
 		Id:        s.testBankID,
-		UserID:    s.testUserID,
 		Name:      s.testName,
 		BanksData: s.testBankData,
 		Meta:      s.testMeta,
@@ -195,7 +197,6 @@ func (s *SuiteGK) SetupSuite() {
 	}
 	s.wantProtoText = &proto.Text{
 		Id:       s.testTextID,
-		UserID:   s.testUserID,
 		Name:     s.testName,
 		Text:     s.testText,
 		Meta:     s.testMeta,
@@ -212,13 +213,13 @@ func (s *SuiteGK) SetupSuite() {
 	}
 	s.wantProtoFile = &proto.File{
 		Id:       s.testFileID,
-		UserID:   s.testUserID,
 		Name:     s.testName,
 		Meta:     s.testMeta,
 		UpdateAt: timestamppb.New(updateAt),
 	}
 
 	s.testBatch1 = make([]byte, 0, 64)
+	s.testBatch2 = make([]byte, 0, 64)
 
 	for i := 0; i < 64; i++ {
 		s.testBatch1 = append(s.testBatch1, byte(i))
@@ -318,7 +319,7 @@ func (s *SuiteGK) TestEmptyArguments() {
 					return s.client.CreatePassword(context.Background(), &proto.CreatePasswordRequest{})
 				},
 				func() (any, error) {
-					return s.client.GetPasswords(context.Background(), &proto.GetPasswordsRequest{})
+					return s.client.GetPasswords(context.Background(), &emptypb.Empty{})
 				},
 			},
 		},
@@ -333,7 +334,7 @@ func (s *SuiteGK) TestEmptyArguments() {
 					return s.client.CreateBank(context.Background(), &proto.CreateBankRequest{})
 				},
 				func() (any, error) {
-					return s.client.GetBanks(context.Background(), &proto.GetBanksRequest{})
+					return s.client.GetBanks(context.Background(), &emptypb.Empty{})
 				},
 			},
 		},
@@ -348,7 +349,7 @@ func (s *SuiteGK) TestEmptyArguments() {
 					return s.client.CreateText(context.Background(), &proto.CreateTextRequest{})
 				},
 				func() (any, error) {
-					return s.client.GetTexts(context.Background(), &proto.GetTextsRequest{})
+					return s.client.GetTexts(context.Background(), &emptypb.Empty{})
 				},
 			},
 		},
@@ -371,7 +372,7 @@ func (s *SuiteGK) TestEmptyArguments() {
 					return stream.CloseAndRecv()
 				},
 				func() (any, error) {
-					stream, err := s.client.GetFiles(context.Background(), &proto.GetFilesRequest{})
+					stream, err := s.client.GetFiles(context.Background(), &emptypb.Empty{})
 					s.Require().NoError(err)
 
 					return stream.Recv()
@@ -383,8 +384,8 @@ func (s *SuiteGK) TestEmptyArguments() {
 			for _, val := range t.methods {
 				res, err := val()
 
-				s.Require().ErrorContains(err, "empty UserID")
-				s.Equal(status.Code(err), codes.InvalidArgument)
+				s.Require().ErrorContains(err, "cannot get user id")
+				s.Equal(status.Code(err), codes.Internal)
 				s.Nil(res)
 			}
 
@@ -405,20 +406,12 @@ func (s *SuiteGK) TestRegisterErrors() {
 		setupMock func()
 	}{
 		{
-			name: "login hash error",
-			err:  "generate hash",
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return("", errors.New("hash login error"))
-			},
-		},
-		{
 			name: "salt error",
 			err:  "generate salt",
 			code: codes.Internal,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
-				s.hmo.On("GenerateSalt").Return("", errors.New("salt error"))
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
+				s.hmo.On("GenerateSalt", 75).Return("", errors.New("salt error"))
 			},
 		},
 		{
@@ -426,8 +419,8 @@ func (s *SuiteGK) TestRegisterErrors() {
 			err:  "generate hash",
 			code: codes.Internal,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
-				s.hmo.On("GenerateSalt").Return(s.testSalt, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
+				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
 				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return("", errors.New("hash error"))
 			},
 		},
@@ -436,8 +429,8 @@ func (s *SuiteGK) TestRegisterErrors() {
 			err:  fmt.Sprintf("create user %s", s.testLogin),
 			code: codes.Internal,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
-				s.hmo.On("GenerateSalt").Return(s.testSalt, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
+				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
 				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
 
 				s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
@@ -449,8 +442,8 @@ func (s *SuiteGK) TestRegisterErrors() {
 			err:  fmt.Sprintf("user %s already exists", s.testLogin),
 			code: codes.AlreadyExists,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
-				s.hmo.On("GenerateSalt").Return(s.testSalt, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
+				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
 				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
 
 				s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
@@ -462,8 +455,8 @@ func (s *SuiteGK) TestRegisterErrors() {
 			err:  fmt.Sprintf("gen token for user %s", s.testLogin),
 			code: codes.Internal,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
-				s.hmo.On("GenerateSalt").Return(s.testSalt, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
+				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
 				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
 
 				s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
@@ -496,19 +489,11 @@ func (s *SuiteGK) TestAuthErrors() {
 		setupMock func()
 	}{
 		{
-			name: "login hash error",
-			err:  "generate hash",
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return("", errors.New("hash login error"))
-			},
-		},
-		{
 			name: "db connection error",
 			err:  fmt.Sprintf("get user %s", s.testLogin),
 			code: codes.Internal,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
 
 				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
 					Return(nil, &pgconn.PgError{Code: "08000"})
@@ -519,7 +504,7 @@ func (s *SuiteGK) TestAuthErrors() {
 			err:  fmt.Sprintf("unknown user %s", s.testLogin),
 			code: codes.Unknown,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
 
 				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
 					Return(nil, pgx.ErrNoRows)
@@ -530,7 +515,7 @@ func (s *SuiteGK) TestAuthErrors() {
 			err:  "generate hash",
 			code: codes.Internal,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
 				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return("", errors.New("hash error"))
 
 				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
@@ -542,7 +527,7 @@ func (s *SuiteGK) TestAuthErrors() {
 			err:  "invalid password",
 			code: codes.PermissionDenied,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
 				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return("invalidHash", nil)
 
 				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
@@ -554,7 +539,7 @@ func (s *SuiteGK) TestAuthErrors() {
 			err:  fmt.Sprintf("gen token for user %s", s.testLogin),
 			code: codes.Internal,
 			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
+				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
 				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
 
 				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
@@ -620,8 +605,7 @@ func (s *SuiteGK) TestCreatePasswordErrors() {
 		s.Run(t.name, func() {
 			t.setupMock()
 
-			res, err := s.client.CreatePassword(context.Background(), &proto.CreatePasswordRequest{
-				UserID:   s.testUserID,
+			res, err := s.client.CreatePassword(s.incomingContext, &proto.CreatePasswordRequest{
 				Name:     s.testName,
 				Login:    s.testLogin,
 				Password: s.testPassword,
@@ -712,9 +696,7 @@ func (s *SuiteGK) TestGetPasswordsErrors() {
 		s.Run(t.name, func() {
 			t.setupMock()
 
-			res, err := s.client.GetPasswords(context.Background(), &proto.GetPasswordsRequest{
-				UserID: s.testUserID,
-			})
+			res, err := s.client.GetPasswords(s.incomingContext, &emptypb.Empty{})
 
 			s.Require().ErrorContains(err, t.err)
 			s.Equal(status.Code(err), t.code)
@@ -762,8 +744,7 @@ func (s *SuiteGK) TestCreateBankErrors() {
 		s.Run(t.name, func() {
 			t.setupMock()
 
-			res, err := s.client.CreateBank(context.Background(), &proto.CreateBankRequest{
-				UserID:    s.testUserID,
+			res, err := s.client.CreateBank(s.incomingContext, &proto.CreateBankRequest{
 				Name:      s.testName,
 				BanksData: s.testBankData,
 				Meta:      s.testMeta,
@@ -853,9 +834,7 @@ func (s *SuiteGK) TestGetBanksErrors() {
 		s.Run(t.name, func() {
 			t.setupMock()
 
-			res, err := s.client.GetBanks(context.Background(), &proto.GetBanksRequest{
-				UserID: s.testUserID,
-			})
+			res, err := s.client.GetBanks(s.incomingContext, &emptypb.Empty{})
 
 			s.Require().ErrorContains(err, t.err)
 			s.Equal(status.Code(err), t.code)
@@ -903,11 +882,10 @@ func (s *SuiteGK) TestCreateTextErrors() {
 		s.Run(t.name, func() {
 			t.setupMock()
 
-			res, err := s.client.CreateText(context.Background(), &proto.CreateTextRequest{
-				UserID: s.testUserID,
-				Name:   s.testName,
-				Text:   s.testText,
-				Meta:   s.testMeta,
+			res, err := s.client.CreateText(s.incomingContext, &proto.CreateTextRequest{
+				Name: s.testName,
+				Text: s.testText,
+				Meta: s.testMeta,
 			})
 
 			s.Require().ErrorContains(err, t.err)
@@ -994,9 +972,7 @@ func (s *SuiteGK) TestGetTextsErrors() {
 		s.Run(t.name, func() {
 			t.setupMock()
 
-			res, err := s.client.GetTexts(context.Background(), &proto.GetTextsRequest{
-				UserID: s.testUserID,
-			})
+			res, err := s.client.GetTexts(s.incomingContext, &emptypb.Empty{})
 
 			s.Require().ErrorContains(err, t.err)
 			s.Equal(status.Code(err), t.code)
@@ -1010,51 +986,79 @@ func (s *SuiteGK) TestCreateFileErrors() {
 		name      string
 		err       string
 		code      codes.Code
-		setupMock func()
+		setupMock func() storage.DBFiler
 	}{
 		{
-			name: "file save error",
-			err:  fmt.Sprintf("save file for user %s", s.testUserID),
+			name: "create DB file error",
+			err:  fmt.Sprintf("create db file for user %s", s.testUserID),
 			code: codes.Internal,
-			setupMock: func() {
-				s.fsmo.On("Save", s.testBuffer).Return("", errors.New("save file error"))
+			setupMock: func() storage.DBFiler {
+				s.fsmo.On("CreateDBFile", mock.Anything).Return(nil, errors.New("create file error"))
+
+				return nil
+			},
+		},
+		{
+			name: "write file error",
+			err:  fmt.Sprintf("write file for user %s", s.testUserID),
+			code: codes.Internal,
+			setupMock: func() storage.DBFiler {
+				dbf := new(DBFilerMocketObject)
+				s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
+
+				dbf.On("Write", s.testBatch1).Return(0, errors.New("write file error"))
+				dbf.On("Close").Return(nil)
+
+				return dbf
 			},
 		},
 		{
 			name: "db connection error",
 			err:  fmt.Sprintf("create file for user %s", s.testUserID),
 			code: codes.Internal,
-			setupMock: func() {
-				s.fsmo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
+			setupMock: func() storage.DBFiler {
+				dbf := new(DBFilerMocketObject)
+				s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
 
-				s.smo.On("CreateFile", s.testUserID, s.testName, s.testPathToFile, s.testMeta).
+				dbf.On("Write", s.testBatch1).Return(64, nil)
+				dbf.On("Close").Return(nil)
+
+				s.smo.On("CreateFile", s.testUserID, s.testName, mock.Anything, s.testMeta).
 					Return(nil, &pgconn.PgError{Code: "08000"})
+
+				return dbf
 			},
 		},
 		{
 			name: "unknown UserID error",
 			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
 			code: codes.Unknown,
-			setupMock: func() {
-				s.fsmo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
+			setupMock: func() storage.DBFiler {
+				dbf := new(DBFilerMocketObject)
+				s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
 
-				s.smo.On("CreateFile", s.testUserID, s.testName, s.testPathToFile, s.testMeta).
+				dbf.On("Write", s.testBatch1).Return(64, nil)
+				dbf.On("Close").Return(nil)
+
+				s.smo.On("CreateFile", s.testUserID, s.testName, mock.Anything, s.testMeta).
 					Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
+
+				return dbf
 			},
 		},
 	} {
 		s.Run(t.name, func() {
-			t.setupMock()
+			fmo := t.setupMock()
 
-			stream, err := s.client.CreateFile(context.Background())
+			stream, err := s.client.CreateFile(s.incomingContext)
 			s.Require().NoError(err)
 
 			err = stream.Send(&proto.CreateFileRequest{
 				Data: &proto.CreateFileRequest_FileInfo{
 					FileInfo: &proto.File{
-						UserID: s.testUserID,
-						Name:   s.testName,
-						Meta:   s.testMeta,
+
+						Name: s.testName,
+						Meta: s.testMeta,
 					},
 				},
 			})
@@ -1079,6 +1083,10 @@ func (s *SuiteGK) TestCreateFileErrors() {
 			s.Require().ErrorContains(err, t.err)
 			s.Equal(status.Code(err), t.code)
 			s.Nil(res)
+
+			if fmo, ok := fmo.(*DBFilerMocketObject); ok {
+				fmo.AssertExpectations(s.T())
+			}
 		})
 	}
 }
@@ -1088,13 +1096,13 @@ func (s *SuiteGK) TestGetFileErrors() {
 		name      string
 		err       string
 		code      codes.Code
-		setupMock func() DBFiler
+		setupMock func() storage.DBFiler
 	}{
 		{
 			name: "db connection error",
 			err:  fmt.Sprintf("get file %s", s.testFileID),
 			code: codes.Internal,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetFile",
 					s.testFileID,
@@ -1107,7 +1115,7 @@ func (s *SuiteGK) TestGetFileErrors() {
 			name: "unknown FileID error",
 			err:  fmt.Sprintf("unknown FileID %s", s.testFileID),
 			code: codes.Unknown,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetFile",
 					s.testFileID,
@@ -1120,13 +1128,13 @@ func (s *SuiteGK) TestGetFileErrors() {
 			name: "get db filer error",
 			err:  fmt.Sprintf("get file %s", s.testFileID),
 			code: codes.Internal,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetFile",
 					s.testFileID,
 				).Return(s.wantFile, nil)
 
-				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(nil, errors.New("test"))
+				s.fsmo.On("GetDBFile", s.testPathToFile).Return(nil, errors.New("test"))
 
 				return nil
 			},
@@ -1135,17 +1143,17 @@ func (s *SuiteGK) TestGetFileErrors() {
 			name: "get chunk error",
 			err:  fmt.Sprintf("get file %s", s.testFileID),
 			code: codes.Internal,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetFile",
 					s.testFileID,
 				).Return(s.wantFile, nil)
 
 				fmo := new(DBFilerMocketObject)
-				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
+				s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil)
 
 				fmo.On("GetChunck").Return(nil, errors.New("test error"))
-				fmo.On("Close")
+				fmo.On("Close").Return(nil)
 
 				return fmo
 			},
@@ -1186,13 +1194,13 @@ func (s *SuiteGK) TestGetFilesErrors() {
 		name      string
 		err       string
 		code      codes.Code
-		setupMock func() DBFiler
+		setupMock func() storage.DBFiler
 	}{
 		{
 			name: "db connection error",
 			err:  fmt.Sprintf("get files %s", s.testUserID),
 			code: codes.Internal,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetAllFiles",
 					s.testUserID,
@@ -1205,7 +1213,7 @@ func (s *SuiteGK) TestGetFilesErrors() {
 			name: "unknown UserID error",
 			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
 			code: codes.Unknown,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetAllFiles",
 					s.testUserID,
@@ -1218,13 +1226,13 @@ func (s *SuiteGK) TestGetFilesErrors() {
 			name: "get db filer error",
 			err:  fmt.Sprintf("get files %s", s.testUserID),
 			code: codes.Internal,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetAllFiles",
 					s.testUserID,
 				).Return([]storage.File{*s.wantFile}, nil)
 
-				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(nil, errors.New("test"))
+				s.fsmo.On("GetDBFile", s.testPathToFile).Return(nil, errors.New("test"))
 
 				return nil
 			},
@@ -1233,17 +1241,17 @@ func (s *SuiteGK) TestGetFilesErrors() {
 			name: "get chunk error",
 			err:  fmt.Sprintf("get files %s", s.testUserID),
 			code: codes.Internal,
-			setupMock: func() DBFiler {
+			setupMock: func() storage.DBFiler {
 				s.smo.On(
 					"GetAllFiles",
 					s.testUserID,
 				).Return([]storage.File{*s.wantFile}, nil)
 
 				fmo := new(DBFilerMocketObject)
-				s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
+				s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil)
 
 				fmo.On("GetChunck").Return(nil, errors.New("test error"))
-				fmo.On("Close")
+				fmo.On("Close").Return(nil)
 
 				return fmo
 			},
@@ -1252,9 +1260,7 @@ func (s *SuiteGK) TestGetFilesErrors() {
 		s.Run(t.name, func() {
 			fmo := t.setupMock()
 
-			stream, err := s.client.GetFiles(context.Background(), &proto.GetFilesRequest{
-				UserID: s.testUserID,
-			})
+			stream, err := s.client.GetFiles(s.incomingContext, &emptypb.Empty{})
 			s.Require().NoError(err)
 
 			fi, err := stream.Recv()
@@ -1281,8 +1287,8 @@ func (s *SuiteGK) TestGetFilesErrors() {
 
 func (s *SuiteGK) TestPositive() {
 	s.Run("test register", func() {
-		s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
-		s.hmo.On("GenerateSalt").Return(s.testSalt, nil)
+		s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
+		s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
 		s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
 
 		s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
@@ -1300,7 +1306,7 @@ func (s *SuiteGK) TestPositive() {
 	})
 
 	s.Run("test auth", func() {
-		s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash, nil)
+		s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
 		s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
 
 		s.smo.On("GetUser", s.testLogin, s.testLoginHash).
@@ -1327,8 +1333,7 @@ func (s *SuiteGK) TestPositive() {
 			s.testMeta,
 		).Return(s.wantPassword, nil)
 
-		res, err := s.client.CreatePassword(context.Background(), &proto.CreatePasswordRequest{
-			UserID:   s.testUserID,
+		res, err := s.client.CreatePassword(s.incomingContext, &proto.CreatePasswordRequest{
 			Name:     s.testName,
 			Login:    s.testLogin,
 			Password: s.testPassword,
@@ -1352,9 +1357,7 @@ func (s *SuiteGK) TestPositive() {
 		s.smo.On("GetAllPassword", s.testUserID).
 			Return([]storage.Password{*s.wantPassword, *s.wantPassword}, nil)
 
-		res, err := s.client.GetPasswords(context.Background(), &proto.GetPasswordsRequest{
-			UserID: s.testUserID,
-		})
+		res, err := s.client.GetPasswords(s.incomingContext, &emptypb.Empty{})
 		s.Require().NoError(err)
 		s.Equal(
 			[]*proto.Password{
@@ -1373,8 +1376,7 @@ func (s *SuiteGK) TestPositive() {
 		).
 			Return(s.wantBank, nil)
 
-		res, err := s.client.CreateBank(context.Background(), &proto.CreateBankRequest{
-			UserID:    s.testUserID,
+		res, err := s.client.CreateBank(s.incomingContext, &proto.CreateBankRequest{
 			Name:      s.testName,
 			BanksData: s.testBankData,
 			Meta:      s.testMeta,
@@ -1397,9 +1399,7 @@ func (s *SuiteGK) TestPositive() {
 		s.smo.On("GetAllBanks", s.testUserID).
 			Return([]storage.Bank{*s.wantBank, *s.wantBank}, nil)
 
-		res, err := s.client.GetBanks(context.Background(), &proto.GetBanksRequest{
-			UserID: s.testUserID,
-		})
+		res, err := s.client.GetBanks(s.incomingContext, &emptypb.Empty{})
 		s.Require().NoError(err)
 		s.Equal(
 			[]*proto.Bank{
@@ -1417,11 +1417,10 @@ func (s *SuiteGK) TestPositive() {
 			s.testMeta,
 		).Return(s.wantText, nil)
 
-		res, err := s.client.CreateText(context.Background(), &proto.CreateTextRequest{
-			UserID: s.testUserID,
-			Name:   s.testName,
-			Text:   s.testText,
-			Meta:   s.testMeta,
+		res, err := s.client.CreateText(s.incomingContext, &proto.CreateTextRequest{
+			Name: s.testName,
+			Text: s.testText,
+			Meta: s.testMeta,
 		})
 		s.Require().NoError(err)
 		s.Equal(s.testTextID, res.GetId())
@@ -1441,9 +1440,7 @@ func (s *SuiteGK) TestPositive() {
 		s.smo.On("GetAllTexts", s.testUserID).
 			Return([]storage.Text{*s.wantText, *s.wantText}, nil)
 
-		res, err := s.client.GetTexts(context.Background(), &proto.GetTextsRequest{
-			UserID: s.testUserID,
-		})
+		res, err := s.client.GetTexts(s.incomingContext, &emptypb.Empty{})
 		s.Require().NoError(err)
 		s.Equal(
 			[]*proto.Text{
@@ -1453,20 +1450,27 @@ func (s *SuiteGK) TestPositive() {
 	})
 
 	s.Run("test create file", func() {
-		s.fsmo.On("Save", s.testBuffer).Return(s.testPathToFile, nil)
+		dbf := new(DBFilerMocketObject)
 
-		s.smo.On("CreateFile", s.testUserID, s.testName, s.testPathToFile, s.testMeta).
+		s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
+
+		dbf.On("Write", s.testBatch1).Return(len(s.testBatch1), nil)
+		dbf.On("Write", s.testBatch2).Return(len(s.testBatch2), nil)
+		dbf.On("Close").Return(nil)
+		defer dbf.AssertExpectations(s.T())
+
+		s.smo.On("CreateFile", s.testUserID, s.testName, mock.Anything, s.testMeta).
 			Return(s.wantFile, nil)
 
-		stream, err := s.client.CreateFile(context.Background())
+		stream, err := s.client.CreateFile(s.incomingContext)
 		s.Require().NoError(err)
 
 		err = stream.Send(&proto.CreateFileRequest{
 			Data: &proto.CreateFileRequest_FileInfo{
 				FileInfo: &proto.File{
-					UserID: s.testUserID,
-					Name:   s.testName,
-					Meta:   s.testMeta,
+
+					Name: s.testName,
+					Meta: s.testMeta,
 				},
 			},
 		})
@@ -1495,12 +1499,12 @@ func (s *SuiteGK) TestPositive() {
 		s.smo.On("GetFile", s.testFileID).Return(s.wantFile, nil)
 
 		fmo := new(DBFilerMocketObject)
-		s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil)
+		s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil)
 
 		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
 		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()
 		fmo.On("GetChunck").Return(nil, io.EOF).Once()
-		fmo.On("Close")
+		fmo.On("Close").Return(nil)
 
 		stream, err := s.client.GetFile(context.Background(), &proto.GetFileRequest{
 			Id: s.testFileID,
@@ -1530,22 +1534,20 @@ func (s *SuiteGK) TestPositive() {
 			}, nil)
 
 		fmo := new(DBFilerMocketObject)
-		s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil).Once()
-		s.fsmo.On("GetDBFiler", s.testPathToFile).Return(fmo, nil).Once()
+		s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil).Once()
+		s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil).Once()
 
 		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
 		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()
 		fmo.On("GetChunck").Return(nil, io.EOF).Once()
-		fmo.On("Close").Once()
+		fmo.On("Close").Return(nil).Once()
 
 		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
 		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()
 		fmo.On("GetChunck").Return(nil, io.EOF).Once()
-		fmo.On("Close").Once()
+		fmo.On("Close").Return(nil).Once()
 
-		stream, err := s.client.GetFiles(context.Background(), &proto.GetFilesRequest{
-			UserID: s.testUserID,
-		})
+		stream, err := s.client.GetFiles(s.incomingContext, &emptypb.Empty{})
 		s.Require().NoError(err)
 
 		fi, err := stream.Recv()

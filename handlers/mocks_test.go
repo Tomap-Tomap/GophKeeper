@@ -3,7 +3,6 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 
 	"github.com/Tomap-Tomap/GophKeeper/storage"
@@ -14,16 +13,16 @@ type HasherMockedObject struct {
 	mock.Mock
 }
 
-func (h *HasherMockedObject) GenerateSalt() (string, error) {
-	args := h.Called()
+func (h *HasherMockedObject) GenerateSalt(len int) (string, error) {
+	args := h.Called(len)
 
 	return args.String(0), args.Error(1)
 }
 
-func (h *HasherMockedObject) GetHash(str string) (string, error) {
+func (h *HasherMockedObject) GetHash(str string) string {
 	args := h.Called(str)
 
-	return args.String(0), args.Error(1)
+	return args.String(0)
 }
 
 func (h *HasherMockedObject) GetHashWithSalt(str, salt string) (string, error) {
@@ -188,24 +187,34 @@ type FileStoreMockerObject struct {
 	mock.Mock
 }
 
-func (fs *FileStoreMockerObject) Save(content bytes.Buffer) (string, error) {
-	args := fs.Called(content)
-
-	return args.String(0), args.Error(1)
-}
-
-func (fs *FileStoreMockerObject) GetDBFiler(pathToFile string) (DBFiler, error) {
-	args := fs.Called(pathToFile)
+func (fs *FileStoreMockerObject) CreateDBFile(fileName string) (storage.DBFiler, error) {
+	args := fs.Called(fileName)
 
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 
-	return args.Get(0).(DBFiler), args.Error(1)
+	return args.Get(0).(storage.DBFiler), args.Error(1)
+}
+
+func (fs *FileStoreMockerObject) GetDBFile(fileName string) (storage.DBFiler, error) {
+	args := fs.Called(fileName)
+
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+
+	return args.Get(0).(storage.DBFiler), args.Error(1)
 }
 
 type DBFilerMocketObject struct {
 	mock.Mock
+}
+
+func (dbf *DBFilerMocketObject) Write(b []byte) (int, error) {
+	args := dbf.Called(b)
+
+	return args.Int(0), args.Error(1)
 }
 
 func (dbf *DBFilerMocketObject) GetChunck() ([]byte, error) {
@@ -218,7 +227,7 @@ func (dbf *DBFilerMocketObject) GetChunck() ([]byte, error) {
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-func (dbf *DBFilerMocketObject) Close() {
-	dbf.Called()
-	return
+func (dbf *DBFilerMocketObject) Close() error {
+	args := dbf.Called()
+	return args.Error(0)
 }
