@@ -1,0 +1,58 @@
+name: ci
+
+on: 
+  pull_request:
+
+jobs:
+
+  unittests:
+    runs-on: ubuntu-latest    
+    container: golang:1.22
+
+    steps:
+      - uses: actions/checkout@v4  
+
+      - name: Unit test
+        run: |
+          go test ./... -tags=unit -v
+
+  integrationtests:
+    runs-on: ubuntu-latest    
+    container: golang:1.22  
+    env:
+      DSN: "host=postgres port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: gophkeeper
+          POSTGRES_PASSWORD: gophkeeper
+          POSTGRES_DB: gophkeeper
+        options: >-
+            --health-cmd pg_isready
+            --health-interval 5s
+            --health-timeout 5s
+            --health-retries 5    
+            
+    steps:
+      - uses: actions/checkout@v4  
+
+      - name: Install goose
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Miration
+        env:
+          GOOSE_DRIVER: postgres
+          GOOSE_DBSTRING: ${{ env.DSN }}
+          GOOSE_MIGRATION_DIR: ./db/
+        run: |
+          goose up
+
+      - name: Integration test
+        env:
+          TEST_DSN: ${{ env.DSN }}
+        run: |
+          go test ./... -tags=integration -v        
+    

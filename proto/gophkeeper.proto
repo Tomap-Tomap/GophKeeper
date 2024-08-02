@@ -1,0 +1,175 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+package gophkeeper;
+
+option go_package = "gophkeeper/proto";
+
+message RegisterRequest {
+    string login = 1;
+    string password = 2;
+}
+
+message RegisterResponse {
+    string token = 1;
+}
+
+message AuthRequest {
+    string login = 1;
+    string password = 2;
+}
+
+message AuthResponse {
+    string token = 1;
+}
+
+message Password {
+    string id = 1;
+	string name = 2;
+	string login = 3;
+	string password = 4;
+	string meta = 5;
+    google.protobuf.Timestamp updateAt = 6;
+}
+
+message CreatePasswordRequest {
+    string name = 1;
+    string login = 2;
+    string password = 3;
+    string meta = 4;
+}
+
+message CreatePasswordResponse {
+    string id = 1;
+}
+
+message GetPasswordRequest {
+    string id = 1;
+}
+
+message GetPasswordResponse {
+    Password password = 1;
+}
+
+message GetPasswordsResponse {
+    repeated Password passwords = 1;
+}
+
+message File {
+    string id = 1;
+    string name = 2;
+    string meta = 3;
+    google.protobuf.Timestamp updateAt = 4;
+}
+
+message CreateFileRequest {
+    oneof data{
+        File fileInfo = 1;
+        bytes content = 2;
+    }
+}
+
+message CreateFileResponse {
+    string id = 1;
+}
+
+message GetFileRequest {
+    string id = 1;
+}
+
+message GetFileResponse {
+    oneof data{
+        File fileInfo = 1;
+        bytes content = 2;
+    }
+}
+
+message GetFilesResponse {
+    oneof data {
+        File fileInfo = 1;
+        bytes content = 2;
+    }
+}
+
+message Bank {
+    string id = 1;
+    string name = 2;
+    string banksData = 3; 
+    string meta = 4;
+    google.protobuf.Timestamp updateAt = 5;
+}
+
+message CreateBankRequest {
+    string name = 1;
+    string banksData = 2;
+    string meta = 3;
+}
+
+message CreateBankResponse {
+    string id = 1;
+}
+
+message GetBankRequest {
+    string id = 1;
+}
+
+message GetBankResponse {
+    Bank bank = 1;
+}
+
+message GetBanksResponse {
+   repeated Bank banks = 1;
+}
+
+message Text {
+    string id = 1;
+    string name = 2;
+    string text = 3; 
+    string meta = 4;
+    google.protobuf.Timestamp updateAt = 5;
+}
+
+message CreateTextRequest {
+    string name = 1;
+    string text = 2;
+    string meta = 3;
+}
+
+message CreateTextResponse {
+    string id = 1;
+}
+
+message GetTextRequest {
+    string id = 1;
+}
+
+message GetTextResponse {
+    Text text = 1;
+}
+
+message GetTextsResponse {
+   repeated Text texts = 1;
+}
+
+service GophKeeper {
+    rpc Register(RegisterRequest) returns (RegisterResponse);
+    rpc Auth(AuthRequest) returns (AuthResponse);
+
+    rpc CreatePassword(CreatePasswordRequest) returns (CreatePasswordResponse);
+    rpc GetPassword(GetPasswordRequest) returns (GetPasswordResponse);
+    rpc GetPasswords(google.protobuf.Empty) returns (GetPasswordsResponse);
+
+    rpc CreateFile(stream CreateFileRequest) returns (CreateFileResponse);
+    rpc GetFile(GetFileRequest) returns (stream GetFileResponse);
+    rpc GetFiles(google.protobuf.Empty) returns (stream GetFilesResponse);
+
+    rpc CreateBank(CreateBankRequest) returns (CreateBankResponse);
+    rpc GetBank(GetBankRequest) returns (GetBankResponse);
+    rpc GetBanks(google.protobuf.Empty) returns (GetBanksResponse);
+
+    rpc CreateText(CreateTextRequest) returns (CreateTextResponse);
+    rpc GetText(GetTextRequest) returns (GetTextResponse);
+    rpc GetTexts(google.protobuf.Empty) returns (GetTextsResponse);
+}
