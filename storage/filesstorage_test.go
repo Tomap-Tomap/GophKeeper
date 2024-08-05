@@ -78,7 +78,7 @@ func TestFileStorage_CreateDBFile(t *testing.T) {
 		dbfs, ok := dbf.(*DBFile)
 		require.True(t, ok)
 		assert.Equal(t, pathToFile, dbfs.file.Name())
-		err = os.Remove(pathToFile)
+		err = fStorage.DeleteDBFile("positiveFile")
 		require.NoError(t, err)
 	})
 }
@@ -154,7 +154,7 @@ func TestDBFile_GetChunck(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
-		data, err := dbf.GetChunck()
+		data, err := dbf.GetChunk()
 		require.ErrorIs(t, err, io.EOF)
 		assert.Nil(t, data)
 	})
@@ -172,7 +172,7 @@ func TestDBFile_GetChunck(t *testing.T) {
 		err = dbf.Close()
 		require.NoError(t, err)
 
-		data, err := dbf.GetChunck()
+		data, err := dbf.GetChunk()
 		require.Error(t, err)
 		require.NotErrorIs(t, err, io.EOF)
 		assert.Nil(t, data)
@@ -189,11 +189,19 @@ func TestDBFile_GetChunck(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
-		data, err := dbf.GetChunck()
+		data, err := dbf.GetChunk()
 		require.NoError(t, err)
 		require.Equal(t, []byte("12"), data)
-		data, err = dbf.GetChunck()
+		data, err = dbf.GetChunk()
 		require.NoError(t, err)
 		require.Equal(t, []byte("34"), data)
 	})
+}
+
+func TestFileStorage_GetChunkSize(t *testing.T) {
+	dbf := FileStorage{
+		chunkSize: 1024,
+	}
+
+	assert.Equal(t, 1024, dbf.GetChunkSize())
 }

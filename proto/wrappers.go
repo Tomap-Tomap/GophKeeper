@@ -1,5 +1,4 @@
-// Package proto пакет со сгенерированным кодом proto файла.
-// Также содержит вспомогательные структуры
+// Package proto provides a package with generated proto file code and helper structures.
 package proto
 
 import (

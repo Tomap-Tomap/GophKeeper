@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -9,15 +10,22 @@ import (
 )
 
 const (
-	updateAtField = "updateat"
-	loginField    = "login"
-	nameField     = "name"
-	metaField     = "meta"
-	userIDField   = "user_id"
-	passwordField = "password"
+	fieldID         = "id"
+	fieldSalt       = "salt"
+	fieldUpdateAt   = "updateat"
+	fieldLogin      = "login"
+	fieldDataName   = "name"
+	fieldMeta       = "meta"
+	fieldUserID     = "user_id"
+	fieldPassword   = "password"
+	fieldPathToFile = "pathtofile"
+	fieldCardNumber = "cardnumber"
+	fieldCVC        = "cvc"
+	fieldOwner      = "owner"
+	fieldExp        = "exp"
 )
 
-// User прдеставлявет собой структуру данных о пользователе
+// User represents a user data structure.
 type User struct {
 	ID       string
 	Login    string
@@ -25,7 +33,7 @@ type User struct {
 	Salt     string
 }
 
-// ScanRow необходим для реализации интерфейса pgx.RowScanner
+// ScanRow scans the user data from the provided rows.
 func (u *User) ScanRow(rows pgx.Rows) error {
 	values, err := rows.Values()
 	if err != nil {
@@ -33,24 +41,21 @@ func (u *User) ScanRow(rows pgx.Rows) error {
 	}
 
 	for i := range values {
-		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
-		case "id":
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
+		fieldName := strings.ToLower(rows.FieldDescriptions()[i].Name)
+		switch fieldName {
+		case fieldID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			u.ID = id.(string)
-		case loginField:
+			u.ID = id
+		case fieldLogin:
 			u.Login = values[i].(string)
-		case passwordField:
+		case fieldPassword:
 			u.Password = strings.TrimSpace(values[i].(string))
-		case "salt":
+		case fieldSalt:
 			u.Salt = strings.TrimSpace(values[i].(string))
 		}
 	}
@@ -58,7 +63,7 @@ func (u *User) ScanRow(rows pgx.Rows) error {
 	return nil
 }
 
-// Password представляет собой структуру данных о сохраненном пароле пользователя
+// Password represents a password data structure.
 type Password struct {
 	ID       string
 	UserID   string
@@ -69,7 +74,7 @@ type Password struct {
 	UpdateAt time.Time
 }
 
-// ScanRow необходим для реализации интерфейса pgx.RowScanner
+// ScanRow scans the password data from the provided rows.
 func (p *Password) ScanRow(rows pgx.Rows) error {
 	values, err := rows.Values()
 	if err != nil {
@@ -77,40 +82,32 @@ func (p *Password) ScanRow(rows pgx.Rows) error {
 	}
 
 	for i := range values {
-		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
-		case "id":
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
+		fieldName := strings.ToLower(rows.FieldDescriptions()[i].Name)
+		switch fieldName {
+		case fieldID:
+			id, err := convertUUIDToString(values[i])
+
+			if err != nil {
+				return err
 			}
-			id, err := uuid.Value()
+			p.ID = id
+		case fieldUserID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			p.ID = id.(string)
-		case userIDField:
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
-
-			if err != nil {
-				return err
-			}
-
-			p.UserID = id.(string)
-		case nameField:
+			p.UserID = id
+		case fieldDataName:
 			p.Name = values[i].(string)
-		case loginField:
+		case fieldLogin:
 			p.Login = values[i].(string)
-		case passwordField:
+		case fieldPassword:
 			p.Password = values[i].(string)
-		case metaField:
+		case fieldMeta:
 			p.Meta = values[i].(string)
-		case updateAtField:
+		case fieldUpdateAt:
 			p.UpdateAt = values[i].(time.Time)
 		}
 	}
@@ -118,7 +115,7 @@ func (p *Password) ScanRow(rows pgx.Rows) error {
 	return nil
 }
 
-// File представляет собой структуру данных о сохраненном файле пользователя
+// File represents a file data structure.
 type File struct {
 	ID         string
 	UserID     string
@@ -128,7 +125,7 @@ type File struct {
 	UpdateAt   time.Time
 }
 
-// ScanRow необходим для реализации интерфейса pgx.RowScanner
+// ScanRow scans the file data from the provided rows.
 func (f *File) ScanRow(rows pgx.Rows) error {
 	values, err := rows.Values()
 	if err != nil {
@@ -136,38 +133,31 @@ func (f *File) ScanRow(rows pgx.Rows) error {
 	}
 
 	for i := range values {
-		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
-		case "id":
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
+		fieldName := strings.ToLower(rows.FieldDescriptions()[i].Name)
+		switch fieldName {
+		case fieldID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			f.ID = id.(string)
-		case userIDField:
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
+			f.ID = id
+		case fieldUserID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			f.UserID = id.(string)
-		case nameField:
+			f.UserID = id
+		case fieldDataName:
 			f.Name = values[i].(string)
-		case "pathtofile":
+		case fieldPathToFile:
 			f.PathToFile = values[i].(string)
-		case metaField:
+		case fieldMeta:
 			f.Meta = values[i].(string)
-		case updateAtField:
+		case fieldUpdateAt:
 			f.UpdateAt = values[i].(time.Time)
 		}
 	}
@@ -175,17 +165,20 @@ func (f *File) ScanRow(rows pgx.Rows) error {
 	return nil
 }
 
-// Bank представляет собой структуру данных о сохраненных банковских данных пользователя
+// Bank represents a card data structure.
 type Bank struct {
-	ID        string
-	UserID    string
-	Name      string
-	BanksData string
-	Meta      string
-	UpdateAt  time.Time
+	ID         string
+	UserID     string
+	Name       string
+	CardNumber string
+	CVC        string
+	Owner      string
+	Meta       string
+	Exp        string
+	UpdateAt   time.Time
 }
 
-// ScanRow необходим для реализации интерфейса pgx.RowScanner
+// ScanRow scans the bank data from the provided rows.
 func (f *Bank) ScanRow(rows pgx.Rows) error {
 	values, err := rows.Values()
 	if err != nil {
@@ -193,38 +186,37 @@ func (f *Bank) ScanRow(rows pgx.Rows) error {
 	}
 
 	for i := range values {
-		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
-		case "id":
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
+		fieldName := strings.ToLower(rows.FieldDescriptions()[i].Name)
+		switch fieldName {
+		case fieldID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			f.ID = id.(string)
-		case userIDField:
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
+			f.ID = id
+		case fieldUserID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			f.UserID = id.(string)
-		case nameField:
+			f.UserID = id
+		case fieldDataName:
 			f.Name = values[i].(string)
-		case "banksdata":
-			f.BanksData = values[i].(string)
-		case metaField:
+		case fieldCardNumber:
+			f.CardNumber = values[i].(string)
+		case fieldCVC:
+			f.CVC = values[i].(string)
+		case fieldOwner:
+			f.Owner = values[i].(string)
+		case fieldMeta:
 			f.Meta = values[i].(string)
-		case updateAtField:
+		case fieldExp:
+			f.Exp = values[i].(string)
+		case fieldUpdateAt:
 			f.UpdateAt = values[i].(time.Time)
 		}
 	}
@@ -232,7 +224,7 @@ func (f *Bank) ScanRow(rows pgx.Rows) error {
 	return nil
 }
 
-// Text представляет собой структуру данных о сохраненных текстовых данных
+// Text represents a text data structure.
 type Text struct {
 	ID       string
 	UserID   string
@@ -242,7 +234,7 @@ type Text struct {
 	UpdateAt time.Time
 }
 
-// ScanRow необходим для реализации интерфейса pgx.RowScanner
+// ScanRow scans the text data from the provided rows.
 func (f *Text) ScanRow(rows pgx.Rows) error {
 	values, err := rows.Values()
 	if err != nil {
@@ -250,41 +242,60 @@ func (f *Text) ScanRow(rows pgx.Rows) error {
 	}
 
 	for i := range values {
-		switch strings.ToLower(rows.FieldDescriptions()[i].Name) {
-		case "id":
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
+		fieldName := strings.ToLower(rows.FieldDescriptions()[i].Name)
+		switch fieldName {
+		case fieldID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			f.ID = id.(string)
-		case userIDField:
-			uuid := pgtype.UUID{
-				Bytes: values[i].([16]byte),
-				Valid: true,
-			}
-			id, err := uuid.Value()
+			f.ID = id
+		case fieldUserID:
+			id, err := convertUUIDToString(values[i])
 
 			if err != nil {
 				return err
 			}
 
-			f.UserID = id.(string)
-		case nameField:
+			f.UserID = id
+		case fieldDataName:
 			f.Name = values[i].(string)
 		case "text":
 			f.Text = values[i].(string)
-		case metaField:
+		case fieldMeta:
 			f.Meta = values[i].(string)
-		case updateAtField:
+		case fieldUpdateAt:
 			f.UpdateAt = values[i].(time.Time)
 		}
 	}
 
 	return nil
+}
+
+func convertUUIDToString(value any) (string, error) {
+	v, ok := value.([16]byte)
+
+	if !ok {
+		return "", fmt.Errorf("cannot convert value to byte")
+	}
+
+	uuid := pgtype.UUID{
+		Bytes: v,
+		Valid: true,
+	}
+	id, err := uuid.Value()
+
+	if err != nil {
+		return "", err
+	}
+
+	result, ok := id.(string)
+
+	if !ok {
+		return "", fmt.Errorf("cannot convert driver.Value to string")
+	}
+
+	return result, nil
 }

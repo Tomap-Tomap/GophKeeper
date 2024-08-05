@@ -23,7 +23,7 @@ func ParseFlagsServer() (p ServerParameters) {
 	f := flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
 	f.StringVar(&p.DSN, "dsn", "host=localhost port=5433 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable", "dsn to DB")
 	f.StringVar(&p.TokenSecret, "secret", "secret", "secret for token sign")
-	f.StringVar(&p.PathToFileStorage, "f", "./filesotrage", "path to file storage")
+	f.StringVar(&p.PathToFileStorage, "f", "/tmp", "path to file storage")
 	f.StringVar(&p.GRPCAddr, "a", "localhost:3388", "address and port to run grpc server")
 	f.UintVar(&p.TokenDuration, "td", 60, "how much token to be valid in minutes")
 	f.UintVar(&p.ChunkSize, "cs", 1024, "how much bytes grpc server push on client")

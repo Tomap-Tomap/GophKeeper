@@ -1,4 +1,4 @@
-// Package hasher определяет методы и структуры для генерации хэшей и солей
+// Package hasher defines methods and structures for generating hashes and salts.
 package hasher
 
 import (
@@ -8,18 +8,18 @@ import (
 	"fmt"
 )
 
-// Hasher структура для работы с хэшами
+// Hasher provides methods to work with hashing functionalities.
 type Hasher struct {
 }
 
-// NewHasher аллоцирует новый Hasher
+// NewHasher allocates and returns a new Hasher instance.
 func NewHasher() *Hasher {
 	return &Hasher{}
 }
 
-// GenerateSalt возвращает соль
-func (h *Hasher) GenerateSalt(len int) (string, error) {
-	salt := make([]byte, len)
+// GenerateSalt generates and returns a salt of the specified length.
+func (h *Hasher) GenerateSalt(length int) (string, error) {
+	salt := make([]byte, length)
 
 	_, err := rand.Read(salt)
 
@@ -30,18 +30,15 @@ func (h *Hasher) GenerateSalt(len int) (string, error) {
 	return hex.EncodeToString(salt), nil
 }
 
-// GetHash генерирует хэш для строки
-func (h *Hasher) GetHash(str string) string {
-	hash := sha256.New()
+// GenerateHash generates a hash for the given string.
+func (h *Hasher) GenerateHash(str string) string {
+	hash := sha256.Sum256([]byte(str))
 
-	hash.Write([]byte(str))
-	dst := hash.Sum(nil)
-
-	return hex.EncodeToString(dst)
+	return hex.EncodeToString(hash[:])
 }
 
-// GetHashWithSalt генерирует хэш для строки с солью
-func (h *Hasher) GetHashWithSalt(str, salt string) (string, error) {
+// GenerateHashWithSalt generates a hash for the given string combined with the provided salt.
+func (h *Hasher) GenerateHashWithSalt(str, salt string) (string, error) {
 	decodeSalt, err := hex.DecodeString(salt)
 
 	if err != nil {

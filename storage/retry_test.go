@@ -83,7 +83,7 @@ func Test_retry2(t *testing.T) {
 		var mu sync.RWMutex
 
 		go func() {
-			time.Sleep(5 * time.Second)
+			time.Sleep(5 * time.Millisecond)
 			mu.Lock()
 			defer mu.Unlock()
 			errConn = nil
@@ -172,7 +172,7 @@ func Test_retry(t *testing.T) {
 		var mu sync.RWMutex
 
 		go func() {
-			time.Sleep(5 * time.Second)
+			time.Sleep(5 * time.Millisecond)
 			mu.Lock()
 			defer mu.Unlock()
 			errConn = nil

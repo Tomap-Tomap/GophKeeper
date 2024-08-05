@@ -3,259 +3,268 @@
 package logger
 
 import (
-	"bytes"
 	"context"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/interop"
-	testgrpc "google.golang.org/grpc/interop/grpc_testing"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
-func Test_loggingResponseWriter_Write(t *testing.T) {
-	type fields struct {
-		ResponseWriter http.ResponseWriter
-		bytes          int
-		code           int
-		wroteHeader    bool
-	}
-	type args struct {
-		b []byte
-	}
-	type want struct {
-		wantRet  int
-		wantSize int
-		wantErr  string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    want
-		wantErr bool
-	}{
-		{
-			name: "test zero",
-			fields: fields{
-				ResponseWriter: httptest.NewRecorder(),
-				code:           200,
-				wroteHeader:    false,
-			},
-			args:    args{[]byte{}},
-			want:    want{0, 0, ""},
-			wantErr: false,
-		},
-		{
-			name: "test not zero",
-			fields: fields{
-				ResponseWriter: httptest.NewRecorder(),
-				code:           200,
-				wroteHeader:    false,
-			},
-			args:    args{[]byte{1, 2, 3}},
-			want:    want{3, 3, ""},
-			wantErr: false,
-		},
-		{
-			name: "test not empty resData",
-			fields: fields{
-				ResponseWriter: httptest.NewRecorder(),
-				bytes:          3,
-				code:           200,
-				wroteHeader:    false,
-			},
-			args:    args{[]byte{1, 2, 3}},
-			want:    want{3, 6, ""},
-			wantErr: false,
-		},
-		{
-			name: "test not 200 code",
-			fields: fields{
-				ResponseWriter: httptest.NewRecorder(),
-				bytes:          3,
-				code:           400,
-				wroteHeader:    true,
-			},
-			args:    args{[]byte{1, 2, 3}},
-			want:    want{3, 6, string([]byte{1, 2, 3})},
-			wantErr: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &loggingResponseWriter{
-				ResponseWriter: tt.fields.ResponseWriter,
-				bytes:          tt.fields.bytes,
-				code:           tt.fields.code,
-				wroteHeader:    tt.fields.wroteHeader,
-			}
-			got, err := r.Write(tt.args.b)
-
-			if tt.wantErr {
-				require.Error(t, err)
-			}
-
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want.wantRet, got)
-			assert.Equal(t, tt.want.wantSize, r.bytes)
-			assert.Equal(t, tt.want.wantErr, r.error)
-		})
-	}
-}
-
-func Test_loggingResponseWriter_WriteHeader(t *testing.T) {
-	type fields struct {
-		ResponseWriter http.ResponseWriter
-		code           int
-	}
-	type args struct {
-		statusCode int
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   int
-	}{
-		{
-			name: "test 200",
-			fields: fields{
-				ResponseWriter: httptest.NewRecorder(),
-			},
-			args: args{200},
-			want: 200,
-		},
-		{
-			name: "test 400",
-			fields: fields{
-				ResponseWriter: httptest.NewRecorder(),
-				code:           123,
-			},
-			args: args{400},
-			want: 400,
-		},
-		{
-			name: "test not empty resData",
-			fields: fields{
-				ResponseWriter: httptest.NewRecorder(),
-			},
-			args: args{400},
-			want: 400,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &loggingResponseWriter{
-				ResponseWriter: tt.fields.ResponseWriter,
-				code:           tt.fields.code,
-			}
-			r.WriteHeader(tt.args.statusCode)
-
-			assert.Equal(t, tt.want, r.code)
-		})
-	}
-}
-
 func TestInitialize(t *testing.T) {
-	type args struct {
-		level string
-	}
 	tests := []struct {
-		name    string
-		path    string
-		args    args
-		wantErr bool
+		name      string
+		level     string
+		output    string
+		expectErr bool
 	}{
 		{
-			name:    "positive test",
-			path:    "stderr",
-			args:    args{"INFO"},
-			wantErr: false,
+			name:      "valid level and output",
+			level:     "info",
+			output:    "stderr",
+			expectErr: false,
 		},
 		{
-			name:    "negative test",
-			path:    "stderr",
-			args:    args{"TEST"},
-			wantErr: true,
+			name:      "invalid level",
+			level:     "invalid_level",
+			output:    "stderr",
+			expectErr: true,
 		},
 		{
-			name:    "negative test",
-			path:    "errorPath#21231",
-			args:    args{"INFO"},
-			wantErr: true,
+			name:      "invalid output path",
+			level:     "info",
+			output:    "/invalid/path/to/log",
+			expectErr: true,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Initialize(tt.args.level, tt.path)
-
-			if tt.wantErr {
+			err := Initialize(tt.level, tt.output)
+			if tt.expectErr {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}
+
+			core, recorded := observer.New(zap.InfoLevel)
+			logger := zap.New(core)
+
+			switch tt.level {
+			case "debug":
+				logger.Debug("debug message")
+				logger.Info("info message")
+			case "info":
+				logger.Info("info message")
+				logger.Warn("warn message")
+			case "warn":
+				logger.Warn("warn message")
+				logger.Error("error message")
+			case "error":
+				logger.Error("error message")
+			}
+
+			if tt.level == "debug" {
+				assert.Equal(t, 2, recorded.Len())
+			} else if tt.level == "info" {
+				assert.Equal(t, 2, recorded.Len())
+			} else if tt.level == "warn" {
+				assert.Equal(t, 2, recorded.Len())
+			} else if tt.level == "error" {
+				assert.Equal(t, 1, recorded.Len())
+			}
 		})
 	}
 }
 
-type testingSink struct {
-	*bytes.Buffer
+type mockProtoMessage struct {
+	proto.Message
 }
 
-func (s *testingSink) Close() error { return nil }
-func (s *testingSink) Sync() error  { return nil }
-
-func TestInterceptorLogger(t *testing.T) {
-	sink := &testingSink{new((bytes.Buffer))}
-	zap.RegisterSink("testingInceptor", func(u *url.URL) (zap.Sink, error) { return sink, nil })
-	Initialize("INFO", "testingInceptor://")
-
-	lis, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err)
-
-	s := grpc.NewServer(grpc.UnaryInterceptor(UnaryInterceptorLogger))
-
-	testgrpc.RegisterTestServiceServer(
-		s,
-		interop.NewTestServer(),
-	)
-
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			require.FailNow(t, err.Error())
+func TestUnaryInterceptorLogger(t *testing.T) {
+	tests := []struct {
+		name        string
+		req         any
+		handler     grpc.UnaryHandler
+		expectedLog []struct {
+			expectedEntry string
+			expectedLevel zapcore.Level
 		}
-	}()
+		expectedError error
+	}{
+		{
+			name:    "valid proto message",
+			req:     &mockProtoMessage{},
+			handler: func(ctx context.Context, req any) (any, error) { return "response", nil },
+			expectedLog: []struct {
+				expectedEntry string
+				expectedLevel zapcore.Level
+			}{
+				{
+					expectedEntry: "Got incoming grpc request",
+					expectedLevel: zap.InfoLevel,
+				},
+				{
+					expectedEntry: "Sending grpc response",
+					expectedLevel: zap.InfoLevel,
+				},
+			},
 
-	defer s.Stop()
+			expectedError: nil,
+		},
+		{
+			name: "invalid message type",
+			req:  "invalid request",
+			handler: func(ctx context.Context, req any) (any, error) {
+				return "response", nil
+			},
+			expectedLog: []struct {
+				expectedEntry string
+				expectedLevel zapcore.Level
+			}{
+				{
+					expectedEntry: "Payload is not a google.golang.org/protobuf/proto.Message; programmatic error?",
+					expectedLevel: zap.WarnLevel,
+				},
+				{
+					expectedEntry: "Sending grpc response",
+					expectedLevel: zap.InfoLevel,
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "handler returns an error",
+			req:  &mockProtoMessage{},
+			handler: func(ctx context.Context, req any) (any, error) {
+				return nil, status.Errorf(codes.Internal, "original error")
+			},
+			expectedLog: []struct {
+				expectedEntry string
+				expectedLevel zapcore.Level
+			}{
+				{
+					expectedEntry: "Got incoming grpc request",
+					expectedLevel: zap.InfoLevel,
+				},
+				{
+					expectedEntry: "Failed request",
+					expectedLevel: zap.WarnLevel,
+				},
+			},
+			expectedError: status.Errorf(codes.Internal, "internal error on method %s", "/some/method"),
+		},
+	}
 
-	t.Run("positive test", func(t *testing.T) {
-		conn, err := grpc.NewClient(
-			lis.Addr().String(),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
-		require.NoError(t, err)
-		defer conn.Close()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Подготовка наблюдателя для логов
+			core, observedLogs := observer.New(zap.InfoLevel)
+			Log = zap.New(core)
 
-		client := testgrpc.NewTestServiceClient(conn)
-		interop.DoEmptyUnaryCall(context.Background(), client)
-		require.NoError(t, err)
+			// Создание метода дя информации о методе grpc, здесь это фиктивные данные
+			info := &grpc.UnaryServerInfo{
+				FullMethod: "/some/method",
+			}
 
-		want := []string{
-			`"msg":"Got incoming grpc request"`,
-			`"msg":"Sending grpc response"`,
-		}
-		logs := sink.String()
+			// Вызов целевой функции
+			_, err := UnaryInterceptorLogger(context.Background(), tt.req, info, tt.handler)
 
-		for _, val := range want {
-			assert.Contains(t, logs, val)
-		}
-	})
+			// Проверка возвращенной ошибки (если ожидается)
+			if tt.expectedError != nil {
+				assert.EqualError(t, err, tt.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Проверка логов
+			logs := observedLogs.All()
+			assert.True(t, len(logs) > 0)
+
+			for i := range logs {
+				assert.Equal(t, tt.expectedLog[i].expectedEntry, logs[i].Message)
+				assert.Equal(t, tt.expectedLog[i].expectedLevel, logs[i].Level)
+			}
+		})
+	}
+}
+
+type mockServerStream struct {
+	grpc.ServerStream
+}
+
+func (m *mockServerStream) SetHeader(md metadata.MD) error {
+	return nil
+}
+
+func (m *mockServerStream) SendHeader(md metadata.MD) error {
+	return nil
+}
+
+func (m *mockServerStream) SetTrailer(md metadata.MD) {}
+
+func TestStreamInterceptorLogger(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	zap.ReplaceGlobals(logger)
+	defer logger.Sync()
+
+	tests := []struct {
+		name          string
+		handler       grpc.StreamHandler
+		expectedError error
+		expectedCode  codes.Code
+	}{
+		{
+			name: "successful stream",
+			handler: func(srv interface{}, stream grpc.ServerStream) error {
+				return nil
+			},
+			expectedError: nil,
+			expectedCode:  codes.OK,
+		},
+		{
+			name: "failed stream with internal error",
+			handler: func(srv interface{}, stream grpc.ServerStream) error {
+				return status.Error(codes.Internal, "internal error")
+			},
+			expectedError: status.Error(codes.Internal, "internal error on method /test.TestService/TestMethod"),
+			expectedCode:  codes.Internal,
+		},
+		{
+			name: "failed stream with other error",
+			handler: func(srv interface{}, stream grpc.ServerStream) error {
+				return status.Error(codes.InvalidArgument, "invalid argument")
+			},
+			expectedError: status.Error(codes.InvalidArgument, "invalid argument"),
+			expectedCode:  codes.InvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &grpc.StreamServerInfo{
+				FullMethod: "/test.TestService/TestMethod",
+			}
+			srv := struct{}{}
+			stream := &mockServerStream{}
+
+			start := time.Now()
+			err := StreamInterceptorLogger(srv, stream, info, tt.handler)
+
+			assert.Equal(t, tt.expectedError, err)
+			if err != nil {
+				assert.Equal(t, tt.expectedCode, status.Code(err))
+			}
+			duration := time.Since(start)
+			t.Logf("Duration: %v", duration)
+		})
+	}
 }

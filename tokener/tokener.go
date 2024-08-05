@@ -1,4 +1,4 @@
-// Package tokener определяет методы и структуры для генерации JWT токенов
+// Package tokener defines methods and structures for generating JWT tokens.
 package tokener
 
 import (
@@ -20,21 +20,21 @@ const (
 	expectedAuthScheme = "Bearer"
 )
 
-// Tokener структура для работы с JWT токенами
+// Tokener represents a structure for working with JWT tokens.
 type Tokener struct {
-	secret string
+	secret []byte
 	exp    time.Duration
 }
 
-// NewTokener аллоцирует новый Tokener
-func NewTokener(secret string, exp time.Duration) *Tokener {
+// NewTokener allocates a new Tokener.
+func NewTokener(secret []byte, exp time.Duration) *Tokener {
 	return &Tokener{
 		secret: secret,
 		exp:    exp,
 	}
 }
 
-// GetToken генирирует новый токен для sub
+// GetToken generates a new token for the subject.
 func (t *Tokener) GetToken(sub string) (string, error) {
 	token := jwt.NewWithClaims(
 		jwt.SigningMethodHS256,
@@ -52,7 +52,7 @@ func (t *Tokener) GetToken(sub string) (string, error) {
 	return tokenString, nil
 }
 
-// StreamServerInterceptor перехватчик для стрима сервера grpc
+// StreamServerInterceptor is a gRPC stream server interceptor for checking JWT authentication.
 func (t *Tokener) StreamServerInterceptor(srv any, stream grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	ctx := stream.Context()
 	newCtx, err := t.authByGRPCContext(ctx)
@@ -67,7 +67,7 @@ func (t *Tokener) StreamServerInterceptor(srv any, stream grpc.ServerStream, _ *
 	return handler(srv, wrapped)
 }
 
-// UnaryServerInterceptor перехватчик для унарного сервера grpc
+// UnaryServerInterceptor is a gRPC unary server interceptor for checking JWT authentication.
 func (t *Tokener) UnaryServerInterceptor(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	if strings.Contains(info.FullMethod, "Register") || strings.Contains(info.FullMethod, "Auth") {
 		return handler(ctx, req)
@@ -82,7 +82,7 @@ func (t *Tokener) UnaryServerInterceptor(ctx context.Context, req any, info *grp
 	return handler(newCtx, req)
 }
 
-func (t *Tokener) getSubFromToken(token string) (string, bool) {
+func (t *Tokener) getSubFromToken(token string) (string, error) {
 	claims := &jwt.RegisteredClaims{}
 	jwtToken, err := jwt.ParseWithClaims(token, claims, func(jwtT *jwt.Token) (interface{}, error) {
 		if _, ok := jwtT.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -93,14 +93,14 @@ func (t *Tokener) getSubFromToken(token string) (string, bool) {
 	})
 
 	if err != nil {
-		return "", false
+		return "", fmt.Errorf("cannot parsing token: %w", err)
 	}
 
 	if !jwtToken.Valid {
-		return "", false
+		return "", fmt.Errorf("invalid token")
 	}
 
-	return claims.Subject, true
+	return claims.Subject, nil
 }
 
 func (t *Tokener) authByGRPCContext(ctx context.Context) (context.Context, error) {
@@ -125,10 +125,10 @@ func (t *Tokener) authByGRPCContext(ctx context.Context) (context.Context, error
 		return ctx, status.Errorf(codes.Unauthenticated, "request unauthenticated with %s", expectedAuthScheme)
 	}
 
-	sub, tokenValid := t.getSubFromToken(token)
+	sub, err := t.getSubFromToken(token)
 
-	if !tokenValid {
-		return ctx, status.Error(codes.PermissionDenied, "invalid auth token")
+	if err != nil {
+		return ctx, status.Errorf(codes.PermissionDenied, "invalid auth token: %s", err)
 	}
 
 	newCtx := metadata.NewIncomingContext(ctx, metadata.Pairs("user_id", sub))

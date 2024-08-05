@@ -25,7 +25,7 @@ func TestHasher_GetHash(t *testing.T) {
 	hasher := NewHasher()
 
 	testStr := "Password"
-	hashStr := hasher.GetHash(testStr)
+	hashStr := hasher.GenerateHash(testStr)
 
 	require.NotEmpty(t, hashStr)
 	assert.NotEqual(t, testStr, hashStr)
@@ -34,7 +34,7 @@ func TestHasher_GetHash(t *testing.T) {
 func TestHasher_GetHashWithSalt(t *testing.T) {
 	t.Run("decode error", func(t *testing.T) {
 		hasher := NewHasher()
-		got, err := hasher.GetHashWithSalt("", "asd")
+		got, err := hasher.GenerateHashWithSalt("", "asd")
 		require.ErrorContains(t, err, "cannot decode salt")
 		assert.Empty(t, got)
 	})
@@ -46,7 +46,7 @@ func TestHasher_GetHashWithSalt(t *testing.T) {
 		require.NoError(t, err)
 
 		hasher := NewHasher()
-		got, err := hasher.GetHashWithSalt("", hex.EncodeToString(salt))
+		got, err := hasher.GenerateHashWithSalt("", hex.EncodeToString(salt))
 		require.NoError(t, err)
 		assert.NotEmpty(t, got)
 	})

@@ -3,1582 +3,1881 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"testing"
 	"time"
 
 	"github.com/Tomap-Tomap/GophKeeper/proto"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func RuneGPRCTestServer(t *testing.T, smo *StorageMockedObject, hmo *HasherMockedObject, tmo *TokenerMockerdObject, fsmo *FileStoreMockerObject) (addr string, stopFunc func()) {
-	lis, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err)
+const emptyString = ""
 
-	s := grpc.NewServer()
+var testError = errors.New("test")
 
-	proto.RegisterGophKeeperServer(s, NewGophKeeperHandler(smo, hmo, tmo, fsmo))
-
-	go func() {
-		if err := s.Serve(lis); err != nil {
-			require.FailNow(t, err.Error())
-		}
-	}()
-
-	addr = lis.Addr().String()
-	stopFunc = s.Stop
-
-	return
-}
-
-func CreateGRPCTestClient(t *testing.T, addr string) (client proto.GophKeeperClient, closeFunc func() error) {
-	conn, err := grpc.NewClient(
-		addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-
-	require.NoError(t, err)
-
-	closeFunc = conn.Close
-	client = proto.NewGophKeeperClient(conn)
-
-	return
-}
-
-type SuiteGK struct {
+type HandlersTestSuite struct {
 	suite.Suite
+	handler              *GophKeeperHandler
+	storageMock          *StorageMockedObject
+	hasherMock           *HasherMockedObject
+	tokenerMock          *TokenerMockedObject
+	fileStoreMock        *FileStoreMockedObject
+	streamCreateFileMock *GophKeeper_CreateFileServerMockedObject
+	streamUpdateFileMock *GophKeeper_UpdateFileServerMockedObject
+	streamGetFileMock    *GophKeeper_GetFileServerMockedObject
 
-	smo        *StorageMockedObject
-	hmo        *HasherMockedObject
-	tmo        *TokenerMockerdObject
-	fsmo       *FileStoreMockerObject
-	client     proto.GophKeeperClient
-	stopClient func() error
-	stopServer func()
+	testIncomingContext context.Context
 
-	wantUser          *storage.User
-	wantPassword      *storage.Password
-	wantProtoPassword *proto.Password
-	wantBank          *storage.Bank
-	wantProtoBank     *proto.Bank
-	wantText          *storage.Text
-	wantProtoText     *proto.Text
-	wantFile          *storage.File
-	wantProtoFile     *proto.File
-	incomingContext   context.Context
+	testUpdateAt time.Time
 
-	testBuffer bytes.Buffer
+	testLogin          string
+	testPassword       string
+	testHashedLogin    string
+	testSalt           string
+	testHashedPassword string
+	testToken          string
+	testName           string
+	testMeta           string
+	testUserID         string
+	testPasswordID     string
+	testCardNumber     string
+	testCvc            string
+	testOwner          string
+	testExp            string
+	testBankID         string
+	testText           string
+	testTextID         string
+	testFileID         string
+
 	testBatch1 []byte
 	testBatch2 []byte
 
-	testUserID     string
-	testPasswordID string
-	testBankID     string
-	testTextID     string
-	testFileID     string
-
-	testPassword   string
-	testLogin      string
-	testLoginHash  string
-	testSalt       string
-	testHash       string
-	testToken      string
-	testName       string
-	testMeta       string
-	testBankData   string
-	testText       string
-	testPathToFile string
+	testSaltLength int
 }
 
-func (s *SuiteGK) SetupSuite() {
-	smo := new(StorageMockedObject)
-	hmo := new(HasherMockedObject)
-	tmo := new(TokenerMockerdObject)
-	fsmo := new(FileStoreMockerObject)
+func (suite *HandlersTestSuite) SetupTest() {
+	suite.storageMock = new(StorageMockedObject)
+	suite.hasherMock = new(HasherMockedObject)
+	suite.tokenerMock = new(TokenerMockedObject)
+	suite.fileStoreMock = new(FileStoreMockedObject)
+	suite.streamCreateFileMock = new(GophKeeper_CreateFileServerMockedObject)
+	suite.streamUpdateFileMock = new(GophKeeper_UpdateFileServerMockedObject)
+	suite.streamGetFileMock = new(GophKeeper_GetFileServerMockedObject)
 
-	addr, stopServer := RuneGPRCTestServer(s.T(), smo, hmo, tmo, fsmo)
+	suite.handler = NewGophKeeperHandler(
+		suite.storageMock,
+		suite.hasherMock,
+		suite.tokenerMock,
+		suite.fileStoreMock,
+		*storage.NewRetryPolicy(3, 5, 3),
+		75,
+	)
 
-	client, closeClient := CreateGRPCTestClient(s.T(), addr)
+	suite.testUpdateAt = time.Now()
 
-	s.smo = smo
-	s.hmo = hmo
-	s.tmo = tmo
-	s.fsmo = fsmo
-	s.client = client
-	s.stopClient = closeClient
-	s.stopServer = stopServer
+	suite.testLogin = "testLogin"
+	suite.testPassword = "testPassword"
+	suite.testHashedLogin = "testHashedLogin"
+	suite.testSalt = "testSalt"
+	suite.testHashedPassword = "testHashedPassword"
+	suite.testToken = "testToken"
+	suite.testName = "testName"
+	suite.testMeta = "testMeta"
+	suite.testUserID = "testUserID"
+	suite.testPasswordID = "testPasswordID"
+	suite.testCardNumber = "testCardNumber"
+	suite.testCvc = "testCvc"
+	suite.testOwner = "testOwner"
+	suite.testExp = "testExp"
+	suite.testBankID = "testBankID"
+	suite.testText = "testText"
+	suite.testTextID = "testTextID"
+	suite.testFileID = "testFileID"
 
-	s.testUserID = "TestUserID"
-	s.testPasswordID = "TestPasswordID"
-	s.testBankID = "TestBankID"
-	s.testTextID = "TestTextID"
-	s.testFileID = "TestFileID"
+	suite.testBatch1 = []byte{1, 2, 3, 4}
+	suite.testBatch2 = []byte{5, 6, 7, 8}
 
-	s.testPassword = "TestPassword"
-	s.testLogin = "TestLogin"
-	s.testLoginHash = "TestLoginHash"
-	s.testSalt = "TestSalt"
-	s.testHash = "TestHash"
-	s.testToken = "TestToken"
-	s.testName = "TestName"
-	s.testMeta = "TestMeta"
-	s.testBankData = "TestBankData"
-	s.testText = "TestText"
-	s.testPathToFile = "TestPathToFile"
+	suite.testIncomingContext = metadata.NewIncomingContext(
+		context.Background(),
+		metadata.Pairs(userIDHeader, suite.testUserID),
+	)
 
-	s.incomingContext = metadata.NewOutgoingContext(context.Background(), metadata.Pairs("user_id", s.testUserID))
-
-	s.wantUser = &storage.User{
-		ID:       s.testUserID,
-		Login:    s.testLogin,
-		Password: s.testHash,
-		Salt:     s.testSalt,
-	}
-
-	updateAt := time.Now()
-	s.wantPassword = &storage.Password{
-		ID:       s.testPasswordID,
-		Name:     s.testName,
-		Login:    s.testLogin,
-		Password: s.testPassword,
-		Meta:     s.testMeta,
-		UpdateAt: updateAt,
-	}
-	s.wantProtoPassword = &proto.Password{
-		Id:       s.testPasswordID,
-		Name:     s.testName,
-		Login:    s.testLogin,
-		Password: s.testPassword,
-		Meta:     s.testMeta,
-		UpdateAt: timestamppb.New(updateAt),
-	}
-
-	s.wantBank = &storage.Bank{
-		ID:        s.testBankID,
-		UserID:    s.testUserID,
-		Name:      s.testName,
-		BanksData: s.testBankData,
-		Meta:      s.testMeta,
-		UpdateAt:  updateAt,
-	}
-	s.wantProtoBank = &proto.Bank{
-		Id:        s.testBankID,
-		Name:      s.testName,
-		BanksData: s.testBankData,
-		Meta:      s.testMeta,
-		UpdateAt:  timestamppb.New(updateAt),
-	}
-
-	s.wantText = &storage.Text{
-		ID:       s.testTextID,
-		UserID:   s.testUserID,
-		Name:     s.testName,
-		Text:     s.testText,
-		Meta:     s.testMeta,
-		UpdateAt: updateAt,
-	}
-	s.wantProtoText = &proto.Text{
-		Id:       s.testTextID,
-		Name:     s.testName,
-		Text:     s.testText,
-		Meta:     s.testMeta,
-		UpdateAt: timestamppb.New(updateAt),
-	}
-
-	s.wantFile = &storage.File{
-		ID:         s.testFileID,
-		UserID:     s.testUserID,
-		Name:       s.testName,
-		PathToFile: s.testPathToFile,
-		Meta:       s.testMeta,
-		UpdateAt:   updateAt,
-	}
-	s.wantProtoFile = &proto.File{
-		Id:       s.testFileID,
-		Name:     s.testName,
-		Meta:     s.testMeta,
-		UpdateAt: timestamppb.New(updateAt),
-	}
-
-	s.testBatch1 = make([]byte, 0, 64)
-	s.testBatch2 = make([]byte, 0, 64)
-
-	for i := 0; i < 64; i++ {
-		s.testBatch1 = append(s.testBatch1, byte(i))
-		s.testBatch2 = append(s.testBatch2, byte(i))
-	}
-
-	_, err := s.testBuffer.Write(s.testBatch1)
-	s.Require().NoError(err)
-	_, err = s.testBuffer.Write(s.testBatch2)
-	s.Require().NoError(err)
+	suite.testSaltLength = 75
 }
 
-func (s *SuiteGK) TearDownSuite() {
-	s.stopServer()
+func (suite *HandlersTestSuite) TearDownSubTest() {
+	suite.storageMock.AssertExpectations(suite.T())
+	suite.hasherMock.AssertExpectations(suite.T())
+	suite.tokenerMock.AssertExpectations(suite.T())
+	suite.fileStoreMock.AssertExpectations(suite.T())
+	suite.streamCreateFileMock.AssertExpectations(suite.T())
+	suite.streamUpdateFileMock.AssertExpectations(suite.T())
+	suite.streamGetFileMock.AssertExpectations(suite.T())
 
-	err := s.stopClient()
-	s.NoError(err)
-}
-
-func (s *SuiteGK) TearDownSubTest() {
-	s.hmo.AssertExpectations(s.T())
-	s.smo.AssertExpectations(s.T())
-	s.tmo.AssertExpectations(s.T())
-	s.fsmo.AssertExpectations(s.T())
-
-	for len(s.hmo.ExpectedCalls) != 0 {
-		s.hmo.ExpectedCalls[0].Unset()
+	for len(suite.storageMock.ExpectedCalls) != 0 {
+		suite.storageMock.ExpectedCalls[0].Unset()
 	}
 
-	for len(s.smo.ExpectedCalls) != 0 {
-		s.smo.ExpectedCalls[0].Unset()
+	for len(suite.hasherMock.ExpectedCalls) != 0 {
+		suite.hasherMock.ExpectedCalls[0].Unset()
 	}
 
-	for len(s.tmo.ExpectedCalls) != 0 {
-		s.tmo.ExpectedCalls[0].Unset()
+	for len(suite.tokenerMock.ExpectedCalls) != 0 {
+		suite.tokenerMock.ExpectedCalls[0].Unset()
 	}
 
-	for len(s.fsmo.ExpectedCalls) != 0 {
-		s.fsmo.ExpectedCalls[0].Unset()
+	for len(suite.fileStoreMock.ExpectedCalls) != 0 {
+		suite.fileStoreMock.ExpectedCalls[0].Unset()
+	}
+
+	for len(suite.streamCreateFileMock.ExpectedCalls) != 0 {
+		suite.streamCreateFileMock.ExpectedCalls[0].Unset()
+	}
+
+	for len(suite.streamUpdateFileMock.ExpectedCalls) != 0 {
+		suite.streamUpdateFileMock.ExpectedCalls[0].Unset()
+	}
+
+	for len(suite.streamGetFileMock.ExpectedCalls) != 0 {
+		suite.streamGetFileMock.ExpectedCalls[0].Unset()
 	}
 }
 
-func (s *SuiteGK) TestEmptyArguments() {
-	for _, t := range []struct {
-		name, login, password string
-		err                   []string
-	}{
-		{"empty login error", "", s.testPassword, []string{"empty login"}},
-		{"empty password error", s.testLogin, "", []string{"empty password"}},
-		{"empty login and password error", "", "", []string{"empty login", "empty password"}},
-	} {
-		s.Run(t.name+" registry", func() {
-			res, err := s.client.Register(context.Background(), &proto.RegisterRequest{
-				Login:    t.login,
-				Password: t.password,
-			})
+func (suite *HandlersTestSuite) TestRegister() {
+	require := suite.Require()
 
-			s.Require().ErrorContains(err, t.err[0])
-
-			if len(t.err) > 1 {
-				s.Require().ErrorContains(err, t.err[1])
-			}
-
-			s.Equal(status.Code(err), codes.InvalidArgument)
-			s.Nil(res)
-		})
-		s.Run(t.name+" auth", func() {
-			res, err := s.client.Auth(context.Background(), &proto.AuthRequest{
-				Login:    t.login,
-				Password: t.password,
-			})
-
-			s.Require().ErrorContains(err, t.err[0])
-
-			if len(t.err) > 1 {
-				s.Require().ErrorContains(err, t.err[1])
-			}
-
-			s.Equal(status.Code(err), codes.InvalidArgument)
-			s.Nil(res)
-		})
+	positiveReq := &proto.RegisterRequest{
+		Login:    suite.testLogin,
+		Password: suite.testPassword,
 	}
 
-	for _, t := range []struct {
-		name, spesialError string
-		spesialMethod      func() (any, error)
-		methods            []func() (any, error)
-	}{
-		{
-			name:         "password empty errors",
-			spesialError: "empty PasswordID",
-			spesialMethod: func() (any, error) {
-				return s.client.GetPassword(context.Background(), &proto.GetPasswordRequest{})
-			},
-			methods: []func() (any, error){
-				func() (any, error) {
-					return s.client.CreatePassword(context.Background(), &proto.CreatePasswordRequest{})
-				},
-				func() (any, error) {
-					return s.client.GetPasswords(context.Background(), &emptypb.Empty{})
-				},
-			},
-		},
-		{
-			name:         "bank empty erros",
-			spesialError: "empty BankID",
-			spesialMethod: func() (any, error) {
-				return s.client.GetBank(context.Background(), &proto.GetBankRequest{})
-			},
-			methods: []func() (any, error){
-				func() (any, error) {
-					return s.client.CreateBank(context.Background(), &proto.CreateBankRequest{})
-				},
-				func() (any, error) {
-					return s.client.GetBanks(context.Background(), &emptypb.Empty{})
-				},
-			},
-		},
-		{
-			name:         "text empty erros",
-			spesialError: "empty TextID",
-			spesialMethod: func() (any, error) {
-				return s.client.GetText(context.Background(), &proto.GetTextRequest{})
-			},
-			methods: []func() (any, error){
-				func() (any, error) {
-					return s.client.CreateText(context.Background(), &proto.CreateTextRequest{})
-				},
-				func() (any, error) {
-					return s.client.GetTexts(context.Background(), &emptypb.Empty{})
-				},
-			},
-		},
-		{
-			name:         "file empty erros",
-			spesialError: "empty FileID",
-			spesialMethod: func() (any, error) {
-				stream, err := s.client.GetFile(context.Background(), &proto.GetFileRequest{})
-				s.Require().NoError(err)
-
-				return stream.Recv()
-			},
-			methods: []func() (any, error){
-				func() (any, error) {
-					stream, err := s.client.CreateFile(context.Background())
-					s.Require().NoError(err)
-					err = stream.Send(&proto.CreateFileRequest{Data: &proto.CreateFileRequest_FileInfo{}})
-					s.Require().NoError(err)
-
-					return stream.CloseAndRecv()
-				},
-				func() (any, error) {
-					stream, err := s.client.GetFiles(context.Background(), &emptypb.Empty{})
-					s.Require().NoError(err)
-
-					return stream.Recv()
-				},
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			for _, val := range t.methods {
-				res, err := val()
-
-				s.Require().ErrorContains(err, "cannot get user id")
-				s.Equal(status.Code(err), codes.Internal)
-				s.Nil(res)
-			}
-
-			res, err := t.spesialMethod()
-
-			s.Require().ErrorContains(err, t.spesialError)
-			s.Equal(status.Code(err), codes.InvalidArgument)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestRegisterErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "salt error",
-			err:  "generate salt",
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GenerateSalt", 75).Return("", errors.New("salt error"))
-			},
-		},
-		{
-			name: "hash error",
-			err:  "generate hash",
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
-				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return("", errors.New("hash error"))
-			},
-		},
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("create user %s", s.testLogin),
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
-				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
-
-				s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
-					Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "user alredy exist error",
-			err:  fmt.Sprintf("user %s already exists", s.testLogin),
-			code: codes.AlreadyExists,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
-				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
-
-				s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
-					Return(nil, &pgconn.PgError{Code: "23505"})
-			},
-		},
-		{
-			name: "tokener error",
-			err:  fmt.Sprintf("gen token for user %s", s.testLogin),
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
-				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
-
-				s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
-					Return(s.wantUser, nil)
-
-				s.tmo.On("GetToken", mock.Anything).Return("", errors.New("token error"))
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.Register(context.Background(), &proto.RegisterRequest{
-				Login:    s.testLogin,
-				Password: s.testPassword,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestAuthErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get user %s", s.testLogin),
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-
-				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
-					Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "user unknown error",
-			err:  fmt.Sprintf("unknown user %s", s.testLogin),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-
-				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
-					Return(nil, pgx.ErrNoRows)
-			},
-		},
-		{
-			name: "hash error",
-			err:  "generate hash",
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return("", errors.New("hash error"))
-
-				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
-					Return(s.wantUser, nil)
-			},
-		},
-		{
-			name: "invalid password error",
-			err:  "invalid password",
-			code: codes.PermissionDenied,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return("invalidHash", nil)
-
-				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
-					Return(s.wantUser, nil)
-			},
-		},
-		{
-			name: "tokener error",
-			err:  fmt.Sprintf("gen token for user %s", s.testLogin),
-			code: codes.Internal,
-			setupMock: func() {
-				s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-				s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
-
-				s.smo.On("GetUser", s.testLogin, s.testLoginHash).
-					Return(s.wantUser, nil)
-
-				s.tmo.On("GetToken", mock.Anything).Return("", errors.New("token error"))
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.Auth(context.Background(), &proto.AuthRequest{
-				Login:    s.testLogin,
-				Password: s.testPassword,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestCreatePasswordErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("create password for user %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"CreatePassword",
-					s.testUserID,
-					s.testName,
-					s.testLogin,
-					s.testPassword,
-					s.testMeta,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"CreatePassword",
-					s.testUserID,
-					s.testName,
-					s.testLogin,
-					s.testPassword,
-					s.testMeta,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.CreatePassword(s.incomingContext, &proto.CreatePasswordRequest{
-				Name:     s.testName,
-				Login:    s.testLogin,
-				Password: s.testPassword,
-				Meta:     s.testMeta,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetPasswordErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get password %s", s.testPasswordID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"GetPassword",
-					s.testPasswordID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown PasswordID error",
-			err:  fmt.Sprintf("unknown PasswordID %s", s.testPasswordID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"GetPassword",
-					s.testPasswordID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.GetPassword(context.Background(), &proto.GetPasswordRequest{
-				Id: s.testPasswordID,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetPasswordsErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get passwords %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"GetAllPassword",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"GetAllPassword",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.GetPasswords(s.incomingContext, &emptypb.Empty{})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestCreateBankErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("create bank data for user %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"CreateBank",
-					s.testUserID,
-					s.testName,
-					s.testBankData,
-					s.testMeta,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"CreateBank",
-					s.testUserID,
-					s.testName,
-					s.testBankData,
-					s.testMeta,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.CreateBank(s.incomingContext, &proto.CreateBankRequest{
-				Name:      s.testName,
-				BanksData: s.testBankData,
-				Meta:      s.testMeta,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetBankErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get bank data %s", s.testBankID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"GetBank",
-					s.testBankID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown BankID error",
-			err:  fmt.Sprintf("unknown BankID %s", s.testBankID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"GetBank",
-					s.testBankID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.GetBank(context.Background(), &proto.GetBankRequest{
-				Id: s.testBankID,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetBanksErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get banks %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"GetAllBanks",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"GetAllBanks",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.GetBanks(s.incomingContext, &emptypb.Empty{})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestCreateTextErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("create text for user %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"CreateText",
-					s.testUserID,
-					s.testName,
-					s.testText,
-					s.testMeta,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"CreateText",
-					s.testUserID,
-					s.testName,
-					s.testText,
-					s.testMeta,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.CreateText(s.incomingContext, &proto.CreateTextRequest{
-				Name: s.testName,
-				Text: s.testText,
-				Meta: s.testMeta,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetTextErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get text %s", s.testTextID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"GetText",
-					s.testTextID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown TextID error",
-			err:  fmt.Sprintf("unknown TextID %s", s.testTextID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"GetText",
-					s.testTextID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.GetText(context.Background(), &proto.GetTextRequest{
-				Id: s.testTextID,
-			})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetTextsErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func()
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get texts %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() {
-				s.smo.On(
-					"GetAllTexts",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() {
-				s.smo.On(
-					"GetAllTexts",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			t.setupMock()
-
-			res, err := s.client.GetTexts(s.incomingContext, &emptypb.Empty{})
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-		})
-	}
-}
-
-func (s *SuiteGK) TestCreateFileErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func() storage.DBFiler
-	}{
-		{
-			name: "create DB file error",
-			err:  fmt.Sprintf("create db file for user %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				s.fsmo.On("CreateDBFile", mock.Anything).Return(nil, errors.New("create file error"))
-
-				return nil
-			},
-		},
-		{
-			name: "write file error",
-			err:  fmt.Sprintf("write file for user %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				dbf := new(DBFilerMocketObject)
-				s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
-
-				dbf.On("Write", s.testBatch1).Return(0, errors.New("write file error"))
-				dbf.On("Close").Return(nil)
-
-				return dbf
-			},
-		},
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("create file for user %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				dbf := new(DBFilerMocketObject)
-				s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
-
-				dbf.On("Write", s.testBatch1).Return(64, nil)
-				dbf.On("Close").Return(nil)
-
-				s.smo.On("CreateFile", s.testUserID, s.testName, mock.Anything, s.testMeta).
-					Return(nil, &pgconn.PgError{Code: "08000"})
-
-				return dbf
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() storage.DBFiler {
-				dbf := new(DBFilerMocketObject)
-				s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
-
-				dbf.On("Write", s.testBatch1).Return(64, nil)
-				dbf.On("Close").Return(nil)
-
-				s.smo.On("CreateFile", s.testUserID, s.testName, mock.Anything, s.testMeta).
-					Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-
-				return dbf
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			fmo := t.setupMock()
-
-			stream, err := s.client.CreateFile(s.incomingContext)
-			s.Require().NoError(err)
-
-			err = stream.Send(&proto.CreateFileRequest{
-				Data: &proto.CreateFileRequest_FileInfo{
-					FileInfo: &proto.File{
-
-						Name: s.testName,
-						Meta: s.testMeta,
-					},
-				},
-			})
-			s.Require().NoError(err)
-
-			err = stream.Send(&proto.CreateFileRequest{
-				Data: &proto.CreateFileRequest_Content{
-					Content: s.testBatch1,
-				},
-			})
-			s.Require().NoError(err)
-
-			err = stream.Send(&proto.CreateFileRequest{
-				Data: &proto.CreateFileRequest_Content{
-					Content: s.testBatch2,
-				},
-			})
-			s.Require().NoError(err)
-
-			res, err := stream.CloseAndRecv()
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(res)
-
-			if fmo, ok := fmo.(*DBFilerMocketObject); ok {
-				fmo.AssertExpectations(s.T())
-			}
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetFileErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func() storage.DBFiler
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get file %s", s.testFileID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetFile",
-					s.testFileID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-
-				return nil
-			},
-		},
-		{
-			name: "unknown FileID error",
-			err:  fmt.Sprintf("unknown FileID %s", s.testFileID),
-			code: codes.Unknown,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetFile",
-					s.testFileID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-
-				return nil
-			},
-		},
-		{
-			name: "get db filer error",
-			err:  fmt.Sprintf("get file %s", s.testFileID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetFile",
-					s.testFileID,
-				).Return(s.wantFile, nil)
-
-				s.fsmo.On("GetDBFile", s.testPathToFile).Return(nil, errors.New("test"))
-
-				return nil
-			},
-		},
-		{
-			name: "get chunk error",
-			err:  fmt.Sprintf("get file %s", s.testFileID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetFile",
-					s.testFileID,
-				).Return(s.wantFile, nil)
-
-				fmo := new(DBFilerMocketObject)
-				s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil)
-
-				fmo.On("GetChunck").Return(nil, errors.New("test error"))
-				fmo.On("Close").Return(nil)
-
-				return fmo
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			fmo := t.setupMock()
-
-			stream, err := s.client.GetFile(context.Background(), &proto.GetFileRequest{
-				Id: s.testFileID,
-			})
-			s.Require().NoError(err)
-
-			fi, err := stream.Recv()
-
-			if err != nil {
-				s.Require().ErrorContains(err, t.err)
-				s.Equal(status.Code(err), t.code)
-				s.Nil(fi)
-				return
-			}
-
-			content, err := stream.Recv()
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(content)
-
-			if fmo, ok := fmo.(*DBFilerMocketObject); ok {
-				fmo.AssertExpectations(s.T())
-			}
-		})
-	}
-}
-
-func (s *SuiteGK) TestGetFilesErrors() {
-	for _, t := range []struct {
-		name      string
-		err       string
-		code      codes.Code
-		setupMock func() storage.DBFiler
-	}{
-		{
-			name: "db connection error",
-			err:  fmt.Sprintf("get files %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetAllFiles",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: "08000"})
-
-				return nil
-			},
-		},
-		{
-			name: "unknown UserID error",
-			err:  fmt.Sprintf("unknown UserID %s", s.testUserID),
-			code: codes.Unknown,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetAllFiles",
-					s.testUserID,
-				).Return(nil, &pgconn.PgError{Code: pgerrcode.ForeignKeyViolation})
-
-				return nil
-			},
-		},
-		{
-			name: "get db filer error",
-			err:  fmt.Sprintf("get files %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetAllFiles",
-					s.testUserID,
-				).Return([]storage.File{*s.wantFile}, nil)
-
-				s.fsmo.On("GetDBFile", s.testPathToFile).Return(nil, errors.New("test"))
-
-				return nil
-			},
-		},
-		{
-			name: "get chunk error",
-			err:  fmt.Sprintf("get files %s", s.testUserID),
-			code: codes.Internal,
-			setupMock: func() storage.DBFiler {
-				s.smo.On(
-					"GetAllFiles",
-					s.testUserID,
-				).Return([]storage.File{*s.wantFile}, nil)
-
-				fmo := new(DBFilerMocketObject)
-				s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil)
-
-				fmo.On("GetChunck").Return(nil, errors.New("test error"))
-				fmo.On("Close").Return(nil)
-
-				return fmo
-			},
-		},
-	} {
-		s.Run(t.name, func() {
-			fmo := t.setupMock()
-
-			stream, err := s.client.GetFiles(s.incomingContext, &emptypb.Empty{})
-			s.Require().NoError(err)
-
-			fi, err := stream.Recv()
-
-			if err != nil {
-				s.Require().ErrorContains(err, t.err)
-				s.Equal(status.Code(err), t.code)
-				s.Nil(fi)
-				return
-			}
-
-			content, err := stream.Recv()
-
-			s.Require().ErrorContains(err, t.err)
-			s.Equal(status.Code(err), t.code)
-			s.Nil(content)
-
-			if fmo, ok := fmo.(*DBFilerMocketObject); ok {
-				fmo.AssertExpectations(s.T())
-			}
-		})
-	}
-}
-
-func (s *SuiteGK) TestPositive() {
-	s.Run("test register", func() {
-		s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-		s.hmo.On("GenerateSalt", 75).Return(s.testSalt, nil)
-		s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
-
-		s.smo.On("CreateUser", s.testLogin, s.testLoginHash, s.testSalt, s.testHash).
-			Return(s.wantUser, nil)
-
-		s.tmo.On("GetToken", mock.Anything).Return(s.testToken, nil)
-
-		res, err := s.client.Register(context.Background(), &proto.RegisterRequest{
-			Login:    s.testLogin,
-			Password: s.testPassword,
-		})
-
-		s.Require().NoError(err)
-		s.Equal(s.testToken, res.GetToken())
+	suite.Run("invalid arguments", func() {
+		req := &proto.RegisterRequest{
+			Login:    "",
+			Password: "",
+		}
+
+		res, err := suite.handler.Register(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.InvalidArgument)
+		require.Nil(res)
 	})
 
-	s.Run("test auth", func() {
-		s.hmo.On("GetHash", s.testLogin).Return(s.testLoginHash)
-		s.hmo.On("GetHashWithSalt", s.testPassword, s.testSalt).Return(s.testHash, nil)
+	suite.Run("generate salt error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.hasherMock.onGenerateSalt(suite.testSaltLength, emptyString, testError)
 
-		s.smo.On("GetUser", s.testLogin, s.testLoginHash).
-			Return(s.wantUser, nil)
-
-		s.tmo.On("GetToken", mock.Anything).Return(s.testToken, nil)
-
-		res, err := s.client.Auth(context.Background(), &proto.AuthRequest{
-			Login:    s.testLogin,
-			Password: s.testPassword,
-		})
-
-		s.Require().NoError(err)
-		s.Equal(s.testToken, res.GetToken())
+		res, err := suite.handler.Register(context.Background(), positiveReq)
+		require.ErrorContains(err, "generate salt")
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
 	})
 
-	s.Run("test create password", func() {
-		s.smo.On(
-			"CreatePassword",
-			s.testUserID,
-			s.testName,
-			s.testLogin,
-			s.testPassword,
-			s.testMeta,
-		).Return(s.wantPassword, nil)
+	suite.Run("generate hash error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.hasherMock.onGenerateSalt(suite.testSaltLength, suite.testSalt, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, emptyString, testError)
 
-		res, err := s.client.CreatePassword(s.incomingContext, &proto.CreatePasswordRequest{
-			Name:     s.testName,
-			Login:    s.testLogin,
-			Password: s.testPassword,
-			Meta:     s.testMeta,
-		})
-		s.Require().NoError(err)
-		s.Equal(s.testPasswordID, res.GetId())
+		res, err := suite.handler.Register(context.Background(), positiveReq)
+		require.ErrorContains(err, "generate hash")
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
 	})
 
-	s.Run("test get password", func() {
-		s.smo.On("GetPassword", s.testPasswordID).Return(s.wantPassword, nil)
+	suite.Run("user already exists error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.hasherMock.onGenerateSalt(suite.testSaltLength, suite.testSalt, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, suite.testHashedPassword, nil)
+		suite.storageMock.onCreateUser(suite.testLogin, suite.testHashedLogin, suite.testSalt, suite.testHashedPassword, nil, storage.ErrUserAlreadyExists)
 
-		res, err := s.client.GetPassword(context.Background(), &proto.GetPasswordRequest{
-			Id: s.testPasswordID,
-		})
-		s.Require().NoError(err)
-		s.Equal(s.wantProtoPassword, res.Password)
+		res, err := suite.handler.Register(context.Background(), positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("user %s already exists", suite.testLogin))
+		require.Equal(status.Code(err), codes.AlreadyExists)
+		require.Nil(res)
 	})
 
-	s.Run("test get passwords", func() {
-		s.smo.On("GetAllPassword", s.testUserID).
-			Return([]storage.Password{*s.wantPassword, *s.wantPassword}, nil)
+	suite.Run("database error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.hasherMock.onGenerateSalt(suite.testSaltLength, suite.testSalt, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, suite.testHashedPassword, nil)
+		suite.storageMock.onCreateUser(suite.testLogin, suite.testHashedLogin, suite.testSalt, suite.testHashedPassword, nil, testError)
 
-		res, err := s.client.GetPasswords(s.incomingContext, &emptypb.Empty{})
-		s.Require().NoError(err)
-		s.Equal(
-			[]*proto.Password{
-				s.wantProtoPassword,
-				s.wantProtoPassword,
-			}, res.Passwords)
+		res, err := suite.handler.Register(context.Background(), positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
 	})
 
-	s.Run("test create bank", func() {
-		s.smo.On(
-			"CreateBank",
-			s.testUserID,
-			s.testName,
-			s.testBankData,
-			s.testMeta,
-		).
-			Return(s.wantBank, nil)
+	suite.Run("get suite.testToken error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.hasherMock.onGenerateSalt(suite.testSaltLength, suite.testSalt, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, suite.testHashedPassword, nil)
+		suite.storageMock.onCreateUser(suite.testLogin, suite.testHashedLogin, suite.testSalt, suite.testHashedPassword, &storage.User{}, nil)
+		suite.tokenerMock.onGetToken(mock.Anything, emptyString, testError)
 
-		res, err := s.client.CreateBank(s.incomingContext, &proto.CreateBankRequest{
-			Name:      s.testName,
-			BanksData: s.testBankData,
-			Meta:      s.testMeta,
-		})
-		s.Require().NoError(err)
-		s.Equal(s.testBankID, res.GetId())
+		res, err := suite.handler.Register(context.Background(), positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
 	})
 
-	s.Run("test get bank", func() {
-		s.smo.On("GetBank", s.testBankID).Return(s.wantBank, nil)
+	suite.Run("positive test", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.hasherMock.onGenerateSalt(suite.testSaltLength, suite.testSalt, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, suite.testHashedPassword, nil)
+		suite.storageMock.onCreateUser(suite.testLogin, suite.testHashedLogin, suite.testSalt, suite.testHashedPassword, &storage.User{}, nil)
+		suite.tokenerMock.onGetToken(mock.Anything, suite.testToken, nil)
 
-		res, err := s.client.GetBank(context.Background(), &proto.GetBankRequest{
-			Id: s.testBankID,
-		})
-		s.Require().NoError(err)
-		s.Equal(s.wantProtoBank, res.Bank)
+		res, err := suite.handler.Register(context.Background(), positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testToken, res.Token)
+	})
+}
+
+func (suite *HandlersTestSuite) TestAuth() {
+	require := suite.Require()
+
+	positiveReq := &proto.AuthRequest{
+		Login:    suite.testLogin,
+		Password: suite.testPassword,
+	}
+
+	suite.Run("invalid arguments", func() {
+		req := &proto.AuthRequest{
+			Login:    "",
+			Password: "",
+		}
+
+		res, err := suite.handler.Auth(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.InvalidArgument)
+		require.Nil(res)
 	})
 
-	s.Run("test get banks", func() {
-		s.smo.On("GetAllBanks", s.testUserID).
-			Return([]storage.Bank{*s.wantBank, *s.wantBank}, nil)
+	suite.Run("database error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.storageMock.onGetUser(suite.testLogin, suite.testHashedLogin, nil, testError)
 
-		res, err := s.client.GetBanks(s.incomingContext, &emptypb.Empty{})
-		s.Require().NoError(err)
-		s.Equal(
-			[]*proto.Bank{
-				s.wantProtoBank,
-				s.wantProtoBank,
-			}, res.Banks)
+		res, err := suite.handler.Auth(context.Background(), positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
 	})
 
-	s.Run("test create text", func() {
-		s.smo.On(
-			"CreateText",
-			s.testUserID,
-			s.testName,
-			s.testText,
-			s.testMeta,
-		).Return(s.wantText, nil)
+	suite.Run("user not found", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.storageMock.onGetUser(suite.testLogin, suite.testHashedLogin, nil, storage.ErrUserNotFound)
 
-		res, err := s.client.CreateText(s.incomingContext, &proto.CreateTextRequest{
-			Name: s.testName,
-			Text: s.testText,
-			Meta: s.testMeta,
-		})
-		s.Require().NoError(err)
-		s.Equal(s.testTextID, res.GetId())
+		res, err := suite.handler.Auth(context.Background(), positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown user %s", suite.testLogin))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
 	})
 
-	s.Run("test get text", func() {
-		s.smo.On("GetText", s.testTextID).Return(s.wantText, nil)
+	suite.Run("hash error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.storageMock.onGetUser(suite.testLogin, suite.testHashedLogin, &storage.User{Salt: suite.testSalt}, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, emptyString, testError)
 
-		res, err := s.client.GetText(context.Background(), &proto.GetTextRequest{
-			Id: s.testTextID,
-		})
-		s.Require().NoError(err)
-		s.Equal(s.wantProtoText, res.Text)
+		res, err := suite.handler.Auth(context.Background(), positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
 	})
 
-	s.Run("test get texts", func() {
-		s.smo.On("GetAllTexts", s.testUserID).
-			Return([]storage.Text{*s.wantText, *s.wantText}, nil)
+	suite.Run("invalid password", func() {
+		invalidHash := "invalidHash"
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.storageMock.onGetUser(suite.testLogin, suite.testHashedLogin, &storage.User{Salt: suite.testSalt, Password: suite.testHashedPassword}, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, invalidHash, nil)
 
-		res, err := s.client.GetTexts(s.incomingContext, &emptypb.Empty{})
-		s.Require().NoError(err)
-		s.Equal(
-			[]*proto.Text{
-				s.wantProtoText,
-				s.wantProtoText,
-			}, res.Texts)
+		res, err := suite.handler.Auth(context.Background(), positiveReq)
+		require.ErrorContains(err, "invalid password")
+		require.Equal(status.Code(err), codes.PermissionDenied)
+		require.Nil(res)
 	})
 
-	s.Run("test create file", func() {
-		dbf := new(DBFilerMocketObject)
+	suite.Run("get suite.testToken error", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.storageMock.onGetUser(suite.testLogin, suite.testHashedLogin, &storage.User{Salt: suite.testSalt, Password: suite.testHashedPassword}, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, suite.testHashedPassword, nil)
+		suite.tokenerMock.onGetToken(mock.Anything, emptyString, testError)
 
-		s.fsmo.On("CreateDBFile", mock.Anything).Return(dbf, nil)
+		res, err := suite.handler.Auth(context.Background(), positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
 
-		dbf.On("Write", s.testBatch1).Return(len(s.testBatch1), nil)
-		dbf.On("Write", s.testBatch2).Return(len(s.testBatch2), nil)
-		dbf.On("Close").Return(nil)
-		defer dbf.AssertExpectations(s.T())
+	suite.Run("positive test", func() {
+		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
+		suite.storageMock.onGetUser(suite.testLogin, suite.testHashedLogin, &storage.User{Salt: suite.testSalt, Password: suite.testHashedPassword}, nil)
+		suite.hasherMock.onGenerateHashWithSalt(suite.testPassword, suite.testSalt, suite.testHashedPassword, nil)
+		suite.tokenerMock.onGetToken(mock.Anything, suite.testToken, nil)
 
-		s.smo.On("CreateFile", s.testUserID, s.testName, mock.Anything, s.testMeta).
-			Return(s.wantFile, nil)
+		res, err := suite.handler.Auth(context.Background(), positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testToken, res.Token)
+	})
+}
 
-		stream, err := s.client.CreateFile(s.incomingContext)
-		s.Require().NoError(err)
+func (suite *HandlersTestSuite) TestCreatePassword() {
+	require := suite.Require()
 
-		err = stream.Send(&proto.CreateFileRequest{
+	positiveReq := &proto.CreatePasswordRequest{
+		Name:     suite.testName,
+		Login:    suite.testLogin,
+		Password: suite.testPassword,
+		Meta:     suite.testMeta,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.CreatePasswordRequest{
+			Name:     "",
+			Login:    "",
+			Password: "",
+			Meta:     "",
+		}
+
+		res, err := suite.handler.CreatePassword(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onCreatePassword(suite.testUserID, suite.testName, suite.testLogin, suite.testPassword, suite.testMeta, nil, testError)
+
+		res, err := suite.handler.CreatePassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onCreatePassword(suite.testUserID, suite.testName, suite.testLogin, suite.testPassword, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.CreatePassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onCreatePassword(suite.testUserID, suite.testName, suite.testLogin, suite.testPassword, suite.testMeta, &storage.Password{ID: suite.testPasswordID}, nil)
+
+		res, err := suite.handler.CreatePassword(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testPasswordID, res.GetId())
+	})
+}
+
+func (suite *HandlersTestSuite) TestUpdatePassword() {
+	require := suite.Require()
+
+	positiveReq := &proto.UpdatePasswordRequest{
+		Id:       suite.testPasswordID,
+		Name:     suite.testName,
+		Login:    suite.testLogin,
+		Password: suite.testPassword,
+		Meta:     suite.testMeta,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.UpdatePasswordRequest{
+			Id:       "",
+			Name:     "",
+			Login:    "",
+			Password: "",
+			Meta:     "",
+		}
+
+		res, err := suite.handler.UpdatePassword(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onUpdatePassword(suite.testPasswordID, suite.testUserID, suite.testName, suite.testLogin, suite.testPassword, suite.testMeta, nil, testError)
+
+		res, err := suite.handler.UpdatePassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onUpdatePassword(suite.testPasswordID, suite.testUserID, suite.testName, suite.testLogin, suite.testPassword, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.UpdatePassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown PasswordID error", func() {
+		suite.storageMock.onUpdatePassword(suite.testPasswordID, suite.testUserID, suite.testName, suite.testLogin, suite.testPassword, suite.testMeta, nil, storage.ErrPasswordNotFound)
+
+		res, err := suite.handler.UpdatePassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown PasswordID %s", suite.testPasswordID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onUpdatePassword(suite.testPasswordID, suite.testUserID, suite.testName, suite.testLogin, suite.testPassword, suite.testMeta, &storage.Password{ID: suite.testPasswordID}, nil)
+
+		res, err := suite.handler.UpdatePassword(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testPasswordID, res.GetId())
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetPassword() {
+	require := suite.Require()
+
+	positiveReq := &proto.GetPasswordRequest{
+		Id: suite.testPasswordID,
+	}
+
+	suite.Run("unauthenticated", func() {
+		res, err := suite.handler.GetPassword(context.Background(), positiveReq)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("empty PasswordID", func() {
+		req := &proto.GetPasswordRequest{
+			Id: "",
+		}
+		res, err := suite.handler.GetPassword(suite.testIncomingContext, req)
+		require.ErrorContains(err, "empty PasswordID")
+		require.Equal(status.Code(err), codes.InvalidArgument)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onGetPassword(suite.testPasswordID, suite.testUserID, nil, testError)
+
+		res, err := suite.handler.GetPassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown PasswordID error", func() {
+		suite.storageMock.onGetPassword(suite.testPasswordID, suite.testUserID, nil, storage.ErrPasswordNotFound)
+
+		res, err := suite.handler.GetPassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown PasswordID %s", suite.testPasswordID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onGetPassword(suite.testPasswordID, suite.testUserID, &storage.Password{
+			ID:       suite.testPasswordID,
+			Name:     suite.testName,
+			Login:    suite.testLogin,
+			Password: suite.testPassword,
+			Meta:     suite.testMeta,
+			UpdateAt: suite.testUpdateAt,
+		}, nil)
+
+		res, err := suite.handler.GetPassword(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(&proto.GetPasswordResponse{
+			Password: &proto.Password{
+				Id:       suite.testPasswordID,
+				Name:     suite.testName,
+				Login:    suite.testLogin,
+				Password: suite.testPassword,
+				Meta:     suite.testMeta,
+				UpdateAt: timestamppb.New(suite.testUpdateAt),
+			},
+		}, res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetPasswords() {
+	require := suite.Require()
+
+	suite.Run("unauthenticated", func() {
+		res, err := suite.handler.GetPasswords(context.Background(), &emptypb.Empty{})
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onGetAllPassword(suite.testUserID, nil, testError)
+
+		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onGetAllPassword(suite.testUserID, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		passwords := []storage.Password{
+			{
+				ID:       suite.testPasswordID,
+				Name:     suite.testName,
+				Login:    suite.testLogin,
+				Password: suite.testPassword,
+				Meta:     suite.testMeta,
+				UpdateAt: suite.testUpdateAt,
+			},
+			{
+				ID:       "anotherPasswordID",
+				Name:     "anotherName",
+				Login:    "anotherLogin",
+				Password: "anotherPassword",
+				Meta:     "anotherMeta",
+				UpdateAt: suite.testUpdateAt,
+			},
+		}
+		suite.storageMock.onGetAllPassword(suite.testUserID, passwords, nil)
+
+		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &emptypb.Empty{})
+		suite.Require().NoError(err)
+		suite.Require().Equal(&proto.GetPasswordsResponse{
+			Passwords: []*proto.Password{
+				{
+					Id:       suite.testPasswordID,
+					Name:     suite.testName,
+					Login:    suite.testLogin,
+					Password: suite.testPassword,
+					Meta:     suite.testMeta,
+					UpdateAt: timestamppb.New(suite.testUpdateAt),
+				},
+				{
+					Id:       "anotherPasswordID",
+					Name:     "anotherName",
+					Login:    "anotherLogin",
+					Password: "anotherPassword",
+					Meta:     "anotherMeta",
+					UpdateAt: timestamppb.New(suite.testUpdateAt),
+				},
+			},
+		}, res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestDeletePassword() {
+	require := suite.Require()
+
+	positiveReq := &proto.DeletePasswordRequest{
+		Id: suite.testPasswordID,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.DeletePasswordRequest{
+			Id: "",
+		}
+
+		res, err := suite.handler.DeletePassword(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onDeletePassword(suite.testPasswordID, suite.testUserID, testError)
+
+		res, err := suite.handler.DeletePassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown PasswordID error", func() {
+		suite.storageMock.onDeletePassword(suite.testPasswordID, suite.testUserID, storage.ErrPasswordNotFound)
+
+		res, err := suite.handler.DeletePassword(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown PasswordID %s", suite.testPasswordID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onDeletePassword(suite.testPasswordID, suite.testUserID, nil)
+
+		res, err := suite.handler.DeletePassword(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Nil(res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestCreateBank() {
+	require := suite.Require()
+
+	positiveReq := &proto.CreateBankRequest{
+		Name:       suite.testName,
+		CardNumber: suite.testCardNumber,
+		Cvc:        suite.testCvc,
+		Owner:      suite.testOwner,
+		Exp:        suite.testExp,
+		Meta:       suite.testMeta,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.CreateBankRequest{
+			Name:       "",
+			CardNumber: "",
+			Cvc:        "",
+			Owner:      "",
+			Exp:        "",
+			Meta:       "",
+		}
+
+		res, err := suite.handler.CreateBank(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onCreateBank(suite.testUserID, suite.testName, suite.testCardNumber, suite.testCvc, suite.testOwner, suite.testExp, suite.testMeta, nil, testError)
+
+		res, err := suite.handler.CreateBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onCreateBank(suite.testUserID, suite.testName, suite.testCardNumber, suite.testCvc, suite.testOwner, suite.testExp, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.CreateBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onCreateBank(suite.testUserID, suite.testName, suite.testCardNumber, suite.testCvc, suite.testOwner, suite.testExp, suite.testMeta, &storage.Bank{ID: suite.testBankID}, nil)
+
+		res, err := suite.handler.CreateBank(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testBankID, res.GetId())
+	})
+}
+
+func (suite *HandlersTestSuite) TestUpdateBank() {
+	require := suite.Require()
+
+	positiveReq := &proto.UpdateBankRequest{
+		Id:         suite.testBankID,
+		Name:       suite.testName,
+		CardNumber: suite.testCardNumber,
+		Cvc:        suite.testCvc,
+		Owner:      suite.testOwner,
+		Exp:        suite.testExp,
+		Meta:       suite.testMeta,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.UpdateBankRequest{
+			Id:         "",
+			Name:       "",
+			CardNumber: "",
+			Cvc:        "",
+			Owner:      "",
+			Exp:        "",
+			Meta:       "",
+		}
+
+		res, err := suite.handler.UpdateBank(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onUpdateBank(suite.testBankID, suite.testUserID, suite.testName, suite.testCardNumber, suite.testCvc, suite.testOwner, suite.testExp, suite.testMeta, nil, testError)
+
+		res, err := suite.handler.UpdateBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onUpdateBank(suite.testBankID, suite.testUserID, suite.testName, suite.testCardNumber, suite.testCvc, suite.testOwner, suite.testExp, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.UpdateBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown BankID error", func() {
+		suite.storageMock.onUpdateBank(suite.testBankID, suite.testUserID, suite.testName, suite.testCardNumber, suite.testCvc, suite.testOwner, suite.testExp, suite.testMeta, nil, storage.ErrBankNotFound)
+
+		res, err := suite.handler.UpdateBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown BankID %s", suite.testBankID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onUpdateBank(suite.testBankID, suite.testUserID, suite.testName, suite.testCardNumber, suite.testCvc, suite.testOwner, suite.testExp, suite.testMeta, &storage.Bank{ID: suite.testBankID}, nil)
+
+		res, err := suite.handler.UpdateBank(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testBankID, res.GetId())
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetBank() {
+	require := suite.Require()
+
+	positiveReq := &proto.GetBankRequest{
+		Id: suite.testBankID,
+	}
+
+	suite.Run("unauthenticated", func() {
+		res, err := suite.handler.GetBank(context.Background(), positiveReq)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("empty BankID", func() {
+		req := &proto.GetBankRequest{
+			Id: "",
+		}
+
+		res, err := suite.handler.GetBank(suite.testIncomingContext, req)
+		require.ErrorContains(err, "empty BankID")
+		require.Equal(status.Code(err), codes.InvalidArgument)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onGetBank(suite.testBankID, suite.testUserID, nil, testError)
+
+		res, err := suite.handler.GetBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown BankID error", func() {
+		suite.storageMock.onGetBank(suite.testBankID, suite.testUserID, nil, storage.ErrBankNotFound)
+
+		res, err := suite.handler.GetBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown BankID %s", suite.testBankID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onGetBank(suite.testBankID, suite.testUserID, &storage.Bank{
+			ID:         suite.testBankID,
+			Name:       suite.testName,
+			CardNumber: suite.testCardNumber,
+			CVC:        suite.testCvc,
+			Owner:      suite.testOwner,
+			Exp:        suite.testExp,
+			Meta:       suite.testMeta,
+			UpdateAt:   suite.testUpdateAt,
+		}, nil)
+
+		res, err := suite.handler.GetBank(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(&proto.GetBankResponse{
+			Bank: &proto.Bank{
+				Id:         suite.testBankID,
+				Name:       suite.testName,
+				CardNumber: suite.testCardNumber,
+				Cvc:        suite.testCvc,
+				Owner:      suite.testOwner,
+				Exp:        suite.testExp,
+				Meta:       suite.testMeta,
+				UpdateAt:   timestamppb.New(suite.testUpdateAt),
+			},
+		}, res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetBanks() {
+	require := suite.Require()
+
+	suite.Run("unauthenticated", func() {
+		res, err := suite.handler.GetBanks(context.Background(), &emptypb.Empty{})
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onGetAllBanks(suite.testUserID, nil, testError)
+
+		res, err := suite.handler.GetBanks(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onGetAllBanks(suite.testUserID, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.GetBanks(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		banks := []storage.Bank{
+			{
+				ID:         suite.testBankID,
+				Name:       suite.testName,
+				CardNumber: suite.testCardNumber,
+				CVC:        suite.testCvc,
+				Owner:      suite.testOwner,
+				Exp:        suite.testExp,
+				Meta:       suite.testMeta,
+				UpdateAt:   suite.testUpdateAt,
+			},
+			{
+				ID:         "anotherBankID",
+				Name:       "anotherName",
+				CardNumber: "anotherCardNumber",
+				CVC:        "anotherCvc",
+				Owner:      "anotherOwner",
+				Exp:        "anotherExp",
+				Meta:       "anotherMeta",
+				UpdateAt:   suite.testUpdateAt,
+			},
+		}
+		suite.storageMock.onGetAllBanks(suite.testUserID, banks, nil)
+
+		res, err := suite.handler.GetBanks(suite.testIncomingContext, &emptypb.Empty{})
+		suite.Require().NoError(err)
+		suite.Require().Equal(&proto.GetBanksResponse{
+			Banks: []*proto.Bank{
+				{
+					Id:         suite.testBankID,
+					Name:       suite.testName,
+					CardNumber: suite.testCardNumber,
+					Cvc:        suite.testCvc,
+					Owner:      suite.testOwner,
+					Exp:        suite.testExp,
+					Meta:       suite.testMeta,
+					UpdateAt:   timestamppb.New(suite.testUpdateAt),
+				},
+				{
+					Id:         "anotherBankID",
+					Name:       "anotherName",
+					CardNumber: "anotherCardNumber",
+					Cvc:        "anotherCvc",
+					Owner:      "anotherOwner",
+					Exp:        "anotherExp",
+					Meta:       "anotherMeta",
+					UpdateAt:   timestamppb.New(suite.testUpdateAt),
+				},
+			},
+		}, res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestDeleteBank() {
+	require := suite.Require()
+
+	positiveReq := &proto.DeleteBankRequest{
+		Id: suite.testBankID,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.DeleteBankRequest{
+			Id: "",
+		}
+
+		res, err := suite.handler.DeleteBank(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onDeleteBank(suite.testBankID, suite.testUserID, testError)
+
+		res, err := suite.handler.DeleteBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown BankID error", func() {
+		suite.storageMock.onDeleteBank(suite.testBankID, suite.testUserID, storage.ErrBankNotFound)
+
+		res, err := suite.handler.DeleteBank(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown BankID %s", suite.testBankID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onDeleteBank(suite.testBankID, suite.testUserID, nil)
+
+		res, err := suite.handler.DeleteBank(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Nil(res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestCreateText() {
+	require := suite.Require()
+
+	positiveReq := &proto.CreateTextRequest{
+		Name: suite.testName,
+		Text: suite.testText,
+		Meta: suite.testMeta,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.CreateTextRequest{
+			Name: "",
+			Text: "",
+			Meta: "",
+		}
+
+		res, err := suite.handler.CreateText(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onCreateText(suite.testUserID, suite.testName, suite.testText, suite.testMeta, nil, testError)
+
+		res, err := suite.handler.CreateText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onCreateText(suite.testUserID, suite.testName, suite.testText, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.CreateText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onCreateText(suite.testUserID, suite.testName, suite.testText, suite.testMeta, &storage.Text{ID: suite.testTextID}, nil)
+
+		res, err := suite.handler.CreateText(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testTextID, res.GetId())
+	})
+}
+
+func (suite *HandlersTestSuite) TestUpdateText() {
+	require := suite.Require()
+
+	positiveReq := &proto.UpdateTextRequest{
+		Id:   suite.testTextID,
+		Name: suite.testName,
+		Text: suite.testText,
+		Meta: suite.testMeta,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.UpdateTextRequest{
+			Id:   "",
+			Name: "",
+			Text: "",
+			Meta: "",
+		}
+
+		res, err := suite.handler.UpdateText(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onUpdateText(suite.testTextID, suite.testUserID, suite.testName, suite.testText, suite.testMeta, nil, testError)
+
+		res, err := suite.handler.UpdateText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onUpdateText(suite.testTextID, suite.testUserID, suite.testName, suite.testText, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.UpdateText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown TextID error", func() {
+		suite.storageMock.onUpdateText(suite.testTextID, suite.testUserID, suite.testName, suite.testText, suite.testMeta, nil, storage.ErrTextNotFound)
+
+		res, err := suite.handler.UpdateText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown TextID %s", suite.testTextID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onUpdateText(suite.testTextID, suite.testUserID, suite.testName, suite.testText, suite.testMeta, &storage.Text{ID: suite.testTextID}, nil)
+
+		res, err := suite.handler.UpdateText(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(suite.testTextID, res.GetId())
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetText() {
+	require := suite.Require()
+
+	positiveReq := &proto.GetTextRequest{
+		Id: suite.testTextID,
+	}
+
+	suite.Run("unauthenticated", func() {
+		res, err := suite.handler.GetText(context.Background(), positiveReq)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("empty TextID", func() {
+		req := &proto.GetTextRequest{
+			Id: "",
+		}
+
+		res, err := suite.handler.GetText(suite.testIncomingContext, req)
+		require.ErrorContains(err, "empty TextID")
+		require.Equal(status.Code(err), codes.InvalidArgument)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onGetText(suite.testTextID, suite.testUserID, nil, testError)
+
+		res, err := suite.handler.GetText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown TextID error", func() {
+		suite.storageMock.onGetText(suite.testTextID, suite.testUserID, nil, storage.ErrTextNotFound)
+
+		res, err := suite.handler.GetText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown TextID %s", suite.testTextID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onGetText(suite.testTextID, suite.testUserID, &storage.Text{
+			ID:       suite.testTextID,
+			Name:     suite.testName,
+			Text:     suite.testText,
+			Meta:     suite.testMeta,
+			UpdateAt: suite.testUpdateAt,
+		}, nil)
+
+		res, err := suite.handler.GetText(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Equal(&proto.GetTextResponse{
+			Text: &proto.Text{
+				Id:       suite.testTextID,
+				Name:     suite.testName,
+				Text:     suite.testText,
+				Meta:     suite.testMeta,
+				UpdateAt: timestamppb.New(suite.testUpdateAt),
+			},
+		}, res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetTexts() {
+	require := suite.Require()
+
+	suite.Run("unauthenticated", func() {
+		res, err := suite.handler.GetTexts(context.Background(), &emptypb.Empty{})
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onGetAllTexts(suite.testUserID, nil, testError)
+
+		res, err := suite.handler.GetTexts(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onGetAllTexts(suite.testUserID, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.GetTexts(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		texts := []storage.Text{
+			{
+				ID:       suite.testTextID,
+				Name:     suite.testName,
+				Text:     suite.testText,
+				Meta:     suite.testMeta,
+				UpdateAt: suite.testUpdateAt,
+			},
+			{
+				ID:       "anotherTextID",
+				Name:     "anotherName",
+				Text:     "anotherText",
+				Meta:     "anotherMeta",
+				UpdateAt: suite.testUpdateAt,
+			},
+		}
+		suite.storageMock.onGetAllTexts(suite.testUserID, texts, nil)
+
+		res, err := suite.handler.GetTexts(suite.testIncomingContext, &emptypb.Empty{})
+		suite.Require().NoError(err)
+		suite.Require().Equal(&proto.GetTextsResponse{
+			Texts: []*proto.Text{
+				{
+					Id:       suite.testTextID,
+					Name:     suite.testName,
+					Text:     suite.testText,
+					Meta:     suite.testMeta,
+					UpdateAt: timestamppb.New(suite.testUpdateAt),
+				},
+				{
+					Id:       "anotherTextID",
+					Name:     "anotherName",
+					Text:     "anotherText",
+					Meta:     "anotherMeta",
+					UpdateAt: timestamppb.New(suite.testUpdateAt),
+				},
+			},
+		}, res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestDeleteText() {
+	require := suite.Require()
+
+	positiveReq := &proto.DeleteTextRequest{
+		Id: suite.testTextID,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.DeleteTextRequest{
+			Id: "",
+		}
+
+		res, err := suite.handler.DeleteText(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onDeleteText(suite.testTextID, suite.testUserID, testError)
+
+		res, err := suite.handler.DeleteText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown TextID error", func() {
+		suite.storageMock.onDeleteText(suite.testTextID, suite.testUserID, storage.ErrTextNotFound)
+
+		res, err := suite.handler.DeleteText(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown TextID %s", suite.testTextID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onDeleteText(suite.testTextID, suite.testUserID, nil)
+
+		res, err := suite.handler.DeleteText(suite.testIncomingContext, positiveReq)
+		suite.Require().NoError(err)
+		suite.Require().Nil(res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestCreateFile() {
+	require := suite.Require()
+
+	fileInfo := &proto.File{
+		Name: suite.testName,
+		Meta: suite.testMeta,
+	}
+	positiveReq := []*proto.CreateFileRequest{
+		{
 			Data: &proto.CreateFileRequest_FileInfo{
-				FileInfo: &proto.File{
-
-					Name: s.testName,
-					Meta: s.testMeta,
-				},
+				FileInfo: fileInfo,
 			},
-		})
-		s.Require().NoError(err)
-
-		err = stream.Send(&proto.CreateFileRequest{
+		},
+		{
 			Data: &proto.CreateFileRequest_Content{
-				Content: s.testBatch1,
+				Content: suite.testBatch1,
 			},
-		})
-		s.Require().NoError(err)
-
-		err = stream.Send(&proto.CreateFileRequest{
+		},
+		{
 			Data: &proto.CreateFileRequest_Content{
-				Content: s.testBatch2,
+				Content: suite.testBatch2,
 			},
-		})
-		s.Require().NoError(err)
+		},
+	}
 
-		res, err := stream.CloseAndRecv()
-		s.Require().NoError(err)
-		s.Equal(s.testFileID, res.GetId())
+	suite.Run("unauthenticated", func() {
+		suite.streamCreateFileMock.onContext(context.Background())
+
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
 	})
 
-	s.Run("test get file", func() {
-		s.smo.On("GetFile", s.testFileID).Return(s.wantFile, nil)
+	suite.Run("cannot receive file info", func() {
+		suite.streamCreateFileMock.onContext(suite.testIncomingContext)
+		suite.streamCreateFileMock.onRecvWithOnce(nil, testError)
 
-		fmo := new(DBFilerMocketObject)
-		s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil)
-
-		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
-		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()
-		fmo.On("GetChunck").Return(nil, io.EOF).Once()
-		fmo.On("Close").Return(nil)
-
-		stream, err := s.client.GetFile(context.Background(), &proto.GetFileRequest{
-			Id: s.testFileID,
-		})
-		s.Require().NoError(err)
-
-		fi, err := stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.wantProtoFile, fi.GetFileInfo())
-
-		content, err := stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.testBatch1, content.GetContent())
-
-		content, err = stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.testBatch2, content.GetContent())
-
-		fmo.AssertExpectations(s.T())
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.ErrorContains(err, "cannot receive file info")
+		require.Equal(status.Code(err), codes.Unknown)
 	})
 
-	s.Run("test get files", func() {
-		s.smo.On("GetAllFiles", s.testUserID).Return(
-			[]storage.File{
-				*s.wantFile,
-				*s.wantFile,
-			}, nil)
+	suite.Run("create DB file error", func() {
+		suite.streamCreateFileMock.onContext(suite.testIncomingContext)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, nil, testError)
 
-		fmo := new(DBFilerMocketObject)
-		s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil).Once()
-		s.fsmo.On("GetDBFile", s.testPathToFile).Return(fmo, nil).Once()
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
 
-		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
-		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()
-		fmo.On("GetChunck").Return(nil, io.EOF).Once()
-		fmo.On("Close").Return(nil).Once()
+	suite.Run("cannot receive content", func() {
+		suite.streamCreateFileMock.onContext(suite.testIncomingContext)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(nil, testError)
 
-		fmo.On("GetChunck").Return(s.testBatch1, nil).Once()
-		fmo.On("GetChunck").Return(s.testBatch2, nil).Once()
-		fmo.On("GetChunck").Return(nil, io.EOF).Once()
-		fmo.On("Close").Return(nil).Once()
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		defer dbfmo.AssertExpectations(suite.T())
 
-		stream, err := s.client.GetFiles(s.incomingContext, &emptypb.Empty{})
-		s.Require().NoError(err)
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
 
-		fi, err := stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.wantProtoFile, fi.GetFileInfo())
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.ErrorContains(err, "cannot receive content")
+		require.Equal(status.Code(err), codes.Unknown)
+	})
 
-		content, err := stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.testBatch1, content.GetContent())
+	suite.Run("write chunk error", func() {
+		suite.streamCreateFileMock.onContext(suite.testIncomingContext)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[1], nil)
 
-		content, err = stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.testBatch2, content.GetContent())
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, 0, testError)
+		defer dbfmo.AssertExpectations(suite.T())
 
-		fi, err = stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.wantProtoFile, fi.GetFileInfo())
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
 
-		content, err = stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.testBatch1, content.GetContent())
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
 
-		content, err = stream.Recv()
-		s.Require().NoError(err)
-		s.Equal(s.testBatch2, content.GetContent())
+	suite.Run("database error", func() {
+		suite.streamCreateFileMock.onContext(suite.testIncomingContext)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[1], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[2], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(nil, io.EOF)
 
-		fmo.AssertExpectations(s.T())
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, len(suite.testBatch1), nil)
+		dbfmo.onWriteOnce(suite.testBatch2, len(suite.testBatch2), nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.storageMock.onCreateFile(suite.testUserID, suite.testName, mock.Anything, suite.testMeta, nil, testError)
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.streamCreateFileMock.onContext(suite.testIncomingContext)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[1], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[2], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(nil, io.EOF)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, len(suite.testBatch1), nil)
+		dbfmo.onWriteOnce(suite.testBatch2, len(suite.testBatch2), nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.storageMock.onCreateFile(suite.testUserID, suite.testName, mock.Anything, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+	})
+
+	suite.Run("positive test", func() {
+		suite.streamCreateFileMock.onContext(suite.testIncomingContext)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[1], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(positiveReq[2], nil)
+		suite.streamCreateFileMock.onRecvWithOnce(nil, io.EOF)
+		suite.streamCreateFileMock.onSendAndClose(&proto.CreateFileResponse{Id: suite.testFileID}, nil)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, len(suite.testBatch1), nil)
+		dbfmo.onWriteOnce(suite.testBatch2, len(suite.testBatch2), nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.storageMock.onCreateFile(suite.testUserID, suite.testName, mock.Anything, suite.testMeta, &storage.File{ID: suite.testFileID}, nil)
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.CreateFile(suite.streamCreateFileMock)
+		require.NoError(err)
 	})
 }
 
-func TestSuiteGK(t *testing.T) {
-	suiteGK := new(SuiteGK)
-	suite.Run(t, suiteGK)
+func (suite *HandlersTestSuite) TestUpdateFile() {
+	require := suite.Require()
+
+	fileInfo := &proto.File{
+		Id:   suite.testFileID,
+		Name: suite.testName,
+		Meta: suite.testMeta,
+	}
+	positiveReq := []*proto.UpdateFileRequest{
+		{
+			Data: &proto.UpdateFileRequest_FileInfo{
+				FileInfo: fileInfo,
+			},
+		},
+		{
+			Data: &proto.UpdateFileRequest_Content{
+				Content: suite.testBatch1,
+			},
+		},
+		{
+			Data: &proto.UpdateFileRequest_Content{
+				Content: suite.testBatch2,
+			},
+		},
+	}
+
+	suite.Run("unauthenticated", func() {
+		suite.streamUpdateFileMock.onContext(context.Background())
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+	})
+
+	suite.Run("cannot receive file info", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(nil, testError)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.ErrorContains(err, "cannot receive file info")
+		require.Equal(status.Code(err), codes.Unknown)
+	})
+
+	suite.Run("create DB file error", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, nil, testError)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("cannot receive content", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(nil, testError)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.ErrorContains(err, "cannot receive content")
+		require.Equal(status.Code(err), codes.Unknown)
+	})
+
+	suite.Run("write chunk error", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[1], nil)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, 0, testError)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("database error", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[1], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[2], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(nil, io.EOF)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, len(suite.testBatch1), nil)
+		dbfmo.onWriteOnce(suite.testBatch2, len(suite.testBatch2), nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.storageMock.onUpdateFile(suite.testFileID, suite.testUserID, suite.testName, mock.Anything, suite.testMeta, nil, testError)
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[1], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[2], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(nil, io.EOF)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, len(suite.testBatch1), nil)
+		dbfmo.onWriteOnce(suite.testBatch2, len(suite.testBatch2), nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.storageMock.onUpdateFile(suite.testFileID, suite.testUserID, suite.testName, mock.Anything, suite.testMeta, nil, storage.ErrUserNotFound)
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+	})
+
+	suite.Run("delete file error", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[1], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[2], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(nil, io.EOF)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, len(suite.testBatch1), nil)
+		dbfmo.onWriteOnce(suite.testBatch2, len(suite.testBatch2), nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.storageMock.onUpdateFile(suite.testFileID, suite.testUserID, suite.testName, mock.Anything, suite.testMeta, &storage.File{
+			ID:         suite.testFileID,
+			PathToFile: mock.Anything,
+		}, nil)
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+		suite.fileStoreMock.onDeleteDBFile(mock.Anything, testError)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("positive test", func() {
+		suite.streamUpdateFileMock.onContext(suite.testIncomingContext)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[0], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[1], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(positiveReq[2], nil)
+		suite.streamUpdateFileMock.onRecvWithOnce(nil, io.EOF)
+		suite.streamUpdateFileMock.onSendAndClose(&proto.UpdateFileResponse{Id: suite.testFileID}, nil)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onWriteOnce(suite.testBatch1, len(suite.testBatch1), nil)
+		dbfmo.onWriteOnce(suite.testBatch2, len(suite.testBatch2), nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.storageMock.onUpdateFile(suite.testFileID, suite.testUserID, suite.testName, mock.Anything, suite.testMeta, &storage.File{
+			ID:         suite.testFileID,
+			PathToFile: mock.Anything,
+		}, nil)
+
+		suite.fileStoreMock.onCreateDBFile(mock.Anything, dbfmo, nil)
+		suite.fileStoreMock.onDeleteDBFile(mock.Anything, nil)
+
+		err := suite.handler.UpdateFile(suite.streamUpdateFileMock)
+		require.NoError(err)
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetFile() {
+	require := suite.Require()
+
+	positiveReq := &proto.GetFileRequest{
+		Id: suite.testFileID,
+	}
+
+	fileInfo := &proto.GetFileResponse{
+		Data: &proto.GetFileResponse_FileInfo{
+			FileInfo: &proto.File{
+				Id:       suite.testFileID,
+				Name:     suite.testName,
+				Meta:     suite.testMeta,
+				UpdateAt: timestamppb.New(suite.testUpdateAt),
+			},
+		},
+	}
+
+	content1 := &proto.GetFileResponse{
+		Data: &proto.GetFileResponse_Content{
+			Content: suite.testBatch1,
+		},
+	}
+
+	content2 := &proto.GetFileResponse{
+		Data: &proto.GetFileResponse_Content{
+			Content: suite.testBatch2,
+		},
+	}
+
+	fileReq := &storage.File{
+		ID:         suite.testFileID,
+		UserID:     suite.testUserID,
+		Name:       suite.testName,
+		PathToFile: mock.Anything,
+		Meta:       suite.testMeta,
+		UpdateAt:   suite.testUpdateAt,
+	}
+
+	suite.Run("unauthenticated", func() {
+		suite.streamGetFileMock.onContext(context.Background())
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+	})
+
+	suite.Run("empty FileID", func() {
+		req := &proto.GetFileRequest{
+			Id: "",
+		}
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+
+		err := suite.handler.GetFile(req, suite.streamGetFileMock)
+		require.ErrorContains(err, "empty FileID")
+		require.Equal(status.Code(err), codes.InvalidArgument)
+	})
+
+	suite.Run("database error", func() {
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+		suite.storageMock.onGetFile(suite.testFileID, suite.testUserID, nil, testError)
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("unknown FileID error", func() {
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+		suite.storageMock.onGetFile(suite.testFileID, suite.testUserID, nil, storage.ErrFileNotFound)
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.ErrorContains(err, fmt.Sprintf("unknown FileID %s", suite.testFileID))
+		require.Equal(status.Code(err), codes.Unknown)
+	})
+
+	suite.Run("send file info error", func() {
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+		suite.streamGetFileMock.onSendOnce(fileInfo, testError)
+
+		suite.storageMock.onGetFile(suite.testFileID, suite.testUserID, fileReq, nil)
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("get DB file error", func() {
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+		suite.streamGetFileMock.onSendOnce(fileInfo, nil)
+
+		suite.storageMock.onGetFile(suite.testFileID, suite.testUserID, fileReq, nil)
+
+		suite.fileStoreMock.onGetDBFile(mock.Anything, nil, testError)
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("get chunk error", func() {
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+		suite.streamGetFileMock.onSendOnce(fileInfo, nil)
+
+		suite.storageMock.onGetFile(suite.testFileID, suite.testUserID, fileReq, nil)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onGetChunkOnce(nil, testError)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.fileStoreMock.onGetDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("send error", func() {
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+		suite.streamGetFileMock.onSendOnce(fileInfo, nil)
+		suite.streamGetFileMock.onSendOnce(content1, testError)
+
+		suite.storageMock.onGetFile(suite.testFileID, suite.testUserID, fileReq, nil)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onGetChunkOnce(suite.testBatch1, nil)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.fileStoreMock.onGetDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Internal)
+	})
+
+	suite.Run("positive test", func() {
+		suite.streamGetFileMock.onContext(suite.testIncomingContext)
+		suite.streamGetFileMock.onSendOnce(fileInfo, nil)
+		suite.streamGetFileMock.onSendOnce(content1, nil)
+		suite.streamGetFileMock.onSendOnce(content2, nil)
+
+		suite.storageMock.onGetFile(suite.testFileID, suite.testUserID, fileReq, nil)
+
+		dbfmo := new(DBFilerMockedObject)
+		dbfmo.onClose(nil)
+		dbfmo.onGetChunkOnce(suite.testBatch1, nil)
+		dbfmo.onGetChunkOnce(suite.testBatch2, nil)
+		dbfmo.onGetChunkOnce(nil, io.EOF)
+		defer dbfmo.AssertExpectations(suite.T())
+
+		suite.fileStoreMock.onGetDBFile(mock.Anything, dbfmo, nil)
+
+		err := suite.handler.GetFile(positiveReq, suite.streamGetFileMock)
+		require.NoError(err)
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetFiles() {
+	require := suite.Require()
+
+	suite.Run("unauthenticated", func() {
+		res, err := suite.handler.GetFiles(context.Background(), &emptypb.Empty{})
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onGetAllFiles(suite.testUserID, nil, testError)
+
+		res, err := suite.handler.GetFiles(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown UserID error", func() {
+		suite.storageMock.onGetAllFiles(suite.testUserID, nil, storage.ErrUserNotFound)
+
+		res, err := suite.handler.GetFiles(suite.testIncomingContext, &emptypb.Empty{})
+		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		files := []storage.File{
+			{
+				ID:       suite.testFileID,
+				Name:     suite.testName,
+				Meta:     suite.testMeta,
+				UpdateAt: suite.testUpdateAt,
+			},
+			{
+				ID:       "anotherFileID",
+				Name:     "anotherName",
+				Meta:     "anotherMeta",
+				UpdateAt: suite.testUpdateAt,
+			},
+		}
+		suite.storageMock.onGetAllFiles(suite.testUserID, files, nil)
+
+		res, err := suite.handler.GetFiles(suite.testIncomingContext, &emptypb.Empty{})
+		suite.Require().NoError(err)
+		suite.Require().Equal(&proto.GetFilesResponse{
+			FileInfo: []*proto.File{
+				{
+					Id:       suite.testFileID,
+					Name:     suite.testName,
+					Meta:     suite.testMeta,
+					UpdateAt: timestamppb.New(suite.testUpdateAt),
+				},
+				{
+					Id:       "anotherFileID",
+					Name:     "anotherName",
+					Meta:     "anotherMeta",
+					UpdateAt: timestamppb.New(suite.testUpdateAt),
+				},
+			},
+		}, res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestDeleteFile() {
+	require := suite.Require()
+
+	positiveReq := &proto.DeleteFileRequest{
+		Id: suite.testFileID,
+	}
+
+	file := &storage.File{
+		ID:         suite.testFileID,
+		UserID:     suite.testUserID,
+		Name:       suite.testName,
+		PathToFile: mock.Anything,
+		Meta:       suite.testMeta,
+		UpdateAt:   suite.testUpdateAt,
+	}
+
+	suite.Run("unauthenticated", func() {
+		req := &proto.DeleteFileRequest{
+			Id: "",
+		}
+
+		res, err := suite.handler.DeleteFile(context.Background(), req)
+		require.Error(err)
+		require.Equal(status.Code(err), codes.Unauthenticated)
+		require.Nil(res)
+	})
+
+	suite.Run("database error", func() {
+		suite.storageMock.onDeleteFile(suite.testFileID, suite.testUserID, nil, testError)
+
+		res, err := suite.handler.DeleteFile(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, testError.Error())
+		require.Equal(status.Code(err), codes.Internal)
+		require.Nil(res)
+	})
+
+	suite.Run("unknown FileID error", func() {
+		suite.storageMock.onDeleteFile(suite.testFileID, suite.testUserID, nil, storage.ErrFileNotFound)
+
+		res, err := suite.handler.DeleteFile(suite.testIncomingContext, positiveReq)
+		require.ErrorContains(err, fmt.Sprintf("unknown FileID %s", suite.testFileID))
+		require.Equal(status.Code(err), codes.Unknown)
+		require.Nil(res)
+	})
+
+	suite.Run("delete file error", func() {
+		suite.storageMock.onDeleteFile(suite.testFileID, suite.testUserID, file, nil)
+
+		suite.fileStoreMock.onDeleteDBFile(mock.Anything, testError)
+
+		res, err := suite.handler.DeleteFile(suite.testIncomingContext, positiveReq)
+		require.Error(err)
+		require.Nil(res)
+	})
+
+	suite.Run("positive test", func() {
+		suite.storageMock.onDeleteFile(suite.testFileID, suite.testUserID, file, nil)
+
+		suite.fileStoreMock.onDeleteDBFile(mock.Anything, nil)
+
+		res, err := suite.handler.DeleteFile(suite.testIncomingContext, positiveReq)
+		require.NoError(err)
+		require.Nil(res)
+	})
+}
+
+func (suite *HandlersTestSuite) TestGetChunkSize() {
+	suite.Run("positive test", func() {
+		suite.fileStoreMock.onGetChunkSize(1024)
+
+		res, err := suite.handler.GetChunkSize(nil, nil)
+		suite.Require().NoError(err)
+		suite.Equal(&proto.GetChunkSizeResponse{
+			Size: 1024,
+		}, res)
+	})
+}
+
+func TestHandlersTestSuite(t *testing.T) {
+	suite.Run(t, new(HandlersTestSuite))
 }

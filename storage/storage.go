@@ -1,4 +1,4 @@
-// Package storage определяет структуры и методы для работы с базой данных postgres
+// Package storage implements methods for working with a PostgreSQL database.
 package storage
 
 import (
@@ -9,12 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Storage представляет собой структуры для взаимодействия с БД
+// Storage represents a structure for interacting with the database.
 type Storage struct {
 	conn *pgxpool.Pool
 }
 
-// NewStorage аллоцирует новый Storage
+// NewStorage allocates and initializes a new Storage instance.
 func NewStorage(ctx context.Context, DSN string) (*Storage, error) {
 	conn, err := pgxpool.New(ctx, DSN)
 	if err != nil {
@@ -26,44 +26,29 @@ func NewStorage(ctx context.Context, DSN string) (*Storage, error) {
 	return dbs, nil
 }
 
-// Close closes DBStorage
+// Close gracefully closes the database connection pool.
 func (s *Storage) Close() {
-	s.conn.Close()
+	if s.conn != nil {
+		s.conn.Close()
+	}
 }
 
-// CreateUser добавляет запись по пользователю в БД
+// CreateUser adds a user record to the database.
 func (s *Storage) CreateUser(ctx context.Context, login, loginHashed, salt, password string) (*User, error) {
-	queryUsers := `
-		WITH t AS (
-			INSERT INTO users (login, password) VALUES ($1, $2)
-			RETURNING *
-		)
-		SELECT id, login, password FROM t;
-	`
-
-	querySalts := `
-		WITH t AS (
-			INSERT INTO salts (login, salt) VALUES ($1, $2)
-			RETURNING *
-		)
-		SELECT salt FROM t;
-	`
-
 	ud := &User{}
 
 	err := pgx.BeginFunc(ctx, s.conn, func(tx pgx.Tx) error {
-		err := s.conn.QueryRow(ctx, queryUsers, login, password).Scan(ud)
+		err := tx.QueryRow(ctx, queryInsertUser, login, password).Scan(ud)
 
 		if err != nil {
-			switch IsUniqueViolation(err) {
-			case true:
-				return fmt.Errorf("user %s already exists: %w", login, err)
-			default:
-				return fmt.Errorf("insert into users table login %s: %w", login, err)
+			if IsUniqueViolation(err) {
+				return fmt.Errorf("%s: %w", login, ErrUserAlreadyExists)
 			}
+
+			return fmt.Errorf("insert into users table login %s: %w", login, err)
 		}
 
-		err = s.conn.QueryRow(ctx, querySalts, loginHashed, salt).Scan(ud)
+		err = tx.QueryRow(ctx, queryInsertSalt, loginHashed, salt).Scan(ud)
 
 		if err != nil {
 			return fmt.Errorf("insert into salts table login %s: %w", login, err)
@@ -79,86 +64,82 @@ func (s *Storage) CreateUser(ctx context.Context, login, loginHashed, salt, pass
 	return ud, nil
 }
 
-// GetUser возвращает даные о пользователе БД
+// GetUser retrieves user data from the database.
 func (s *Storage) GetUser(ctx context.Context, login, loginHashed string) (*User, error) {
-	query := `
-		SELECT u.id, u.login, u.password, s.salt
-		FROM users u, salts s
-		WHERE u.login = $1 AND s.login = $2;
-	`
-
 	ud := &User{}
 
-	err := s.conn.QueryRow(ctx, query, login, loginHashed).Scan(ud)
+	err := s.conn.QueryRow(ctx, querySelectUser, login, loginHashed).Scan(ud)
 
 	if err != nil {
-		switch {
-		case IsNowRowError(err):
-			return nil, fmt.Errorf("unknown user %s: %w", login, err)
-		default:
-			return nil, fmt.Errorf("get user %s: %w", login, err)
+		if IsNoRowError(err) {
+			return nil, fmt.Errorf("%s: %w", login, ErrUserNotFound)
 		}
+
+		return nil, fmt.Errorf("get user %s: %w", login, err)
 	}
 
 	return ud, nil
 }
 
-// CreatePassword добавляет данные по паролю в БД
+// CreatePassword adds password data to the database.
 func (s *Storage) CreatePassword(ctx context.Context, userID, name, login, password, meta string) (*Password, error) {
-	query := `
-		WITH t AS (
-			INSERT INTO passwords (user_id, name, login, password, meta) VALUES ($1, $2, $3, $4, $5)
-			RETURNING *
-		)
-		SELECT * FROM t;
-	`
-
 	pwd := &Password{}
 
-	err := s.conn.QueryRow(ctx, query, userID, name, login, password, meta).Scan(pwd)
+	err := s.conn.QueryRow(ctx, queryInsertPassword, userID, name, login, password, meta).Scan(pwd)
+
+	if err != nil {
+		if IsForeignKeyViolation(err) {
+			return nil, fmt.Errorf("%w: %s", ErrUserNotFound, userID)
+		}
+
+		return nil, fmt.Errorf("insert into passwords table name %s: %w", name, err)
+	}
+
+	return pwd, nil
+}
+
+// UpdatePassword updates password data in the database.
+func (s *Storage) UpdatePassword(ctx context.Context, passwordID, userID, name, login, password, meta string) (*Password, error) {
+	pwd := &Password{}
+
+	err := s.conn.QueryRow(ctx, queryUpdatePassword, userID, name, login, password, meta, passwordID).Scan(pwd)
 
 	if err != nil {
 		switch {
 		case IsForeignKeyViolation(err):
-			return nil, fmt.Errorf("unknown user %s: %w", userID, err)
+			return nil, fmt.Errorf("%s: %w", userID, ErrUserNotFound)
+		case IsNoRowError(err):
+			return nil, fmt.Errorf("%s: %w", passwordID, ErrPasswordNotFound)
 		default:
-			return nil, fmt.Errorf("insert into passwords table name %s: %w", name, err)
+			return nil, fmt.Errorf("update passwords table name %s: %w", name, err)
 		}
 	}
 
 	return pwd, nil
 }
 
-// GetPassword возращает данные по сохраненному паспорту
-func (s *Storage) GetPassword(ctx context.Context, passwordID string) (*Password, error) {
-	query := `
-		SELECT *
-		FROM passwords
-		WHERE id = $1;
-	`
-
+// GetPassword returns password data from the database.
+func (s *Storage) GetPassword(ctx context.Context, passwordID, userID string) (*Password, error) {
 	pwd := &Password{}
 
-	err := s.conn.QueryRow(ctx, query, passwordID).Scan(pwd)
+	err := s.conn.QueryRow(ctx, querySelectPassword, passwordID, userID).Scan(pwd)
 
 	if err != nil {
+		if IsNoRowError(err) {
+			return nil, fmt.Errorf("%s: %w", passwordID, ErrPasswordNotFound)
+		}
+
 		return nil, fmt.Errorf("get password id %s: %w", passwordID, err)
 	}
 
 	return pwd, nil
 }
 
-// GetAllPassword возращает все данные по сохраненным паспортам
+// GetAllPassword returns all passwords data from the database.
 func (s *Storage) GetAllPassword(ctx context.Context, userID string) ([]Password, error) {
-	query := `
-		SELECT *
-		FROM passwords
-		WHERE user_id = $1;
-	`
-
 	pwds := make([]Password, 0)
 
-	rows, err := s.conn.Query(ctx, query, userID)
+	rows, err := s.conn.Query(ctx, querySelectPasswords, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("query execution from table passwords user_id %s: %w", userID, err)
@@ -177,64 +158,84 @@ func (s *Storage) GetAllPassword(ctx context.Context, userID string) ([]Password
 		pwds = append(pwds, pwd)
 	}
 
-	if len(pwds) == 0 {
-		return nil, fmt.Errorf("user to user_id %s don't have passwords", userID)
-	}
-
 	return pwds, nil
 }
 
-// CreateFile добавляет данные о файле в БД
-func (s *Storage) CreateFile(ctx context.Context, userID, name, pathToFile, meta string) (*File, error) {
-	query := `
-		WITH t AS (
-			INSERT INTO files (user_id, name, pathtofile, meta) VALUES ($1, $2, $3, $4)
-			RETURNING *
-		)
-		SELECT * FROM t;
-	`
+// DeletePassword delete password data in the database.
+func (s *Storage) DeletePassword(ctx context.Context, passwordID, userID string) error {
+	file := &Password{}
 
-	file := &File{}
-
-	err := s.conn.QueryRow(ctx, query, userID, name, pathToFile, meta).Scan(file)
+	err := s.conn.QueryRow(ctx, queryDeletePassword, passwordID, userID).Scan(file)
 
 	if err != nil {
+		if IsNoRowError(err) {
+			return fmt.Errorf("%s: %w", passwordID, ErrPasswordNotFound)
+		}
+		return fmt.Errorf("delete passwords %s: %w", passwordID, err)
+	}
+
+	return nil
+}
+
+// CreateFile adds file data to the database.
+func (s *Storage) CreateFile(ctx context.Context, userID, name, pathToFile, meta string) (*File, error) {
+	file := &File{}
+
+	err := s.conn.QueryRow(ctx, queryInsertFile, userID, name, pathToFile, meta).Scan(file)
+
+	if err != nil {
+		if IsForeignKeyViolation(err) {
+			return nil, ErrUserNotFound
+		}
+
 		return nil, fmt.Errorf("insert into files table name %s: %w", name, err)
 	}
 
 	return file, nil
 }
 
-// GetFile возращает данные по сохраненному файлу
-func (s *Storage) GetFile(ctx context.Context, fileID string) (*File, error) {
-	query := `
-		SELECT *
-		FROM files
-		WHERE id = $1;
-	`
-
+// UpdateFile updates file data in the database.
+func (s *Storage) UpdateFile(ctx context.Context, fileID, userID, name, pathToFile, meta string) (*File, error) {
 	file := &File{}
 
-	err := s.conn.QueryRow(ctx, query, fileID).Scan(file)
+	err := s.conn.QueryRow(ctx, queryUpdateFile, userID, name, pathToFile, meta, fileID).Scan(file)
 
 	if err != nil {
+		switch {
+		case IsForeignKeyViolation(err):
+			return nil, fmt.Errorf("%s: %w", userID, ErrUserNotFound)
+		case IsNoRowError(err):
+			return nil, fmt.Errorf("%s: %w", fileID, ErrFileNotFound)
+		default:
+			return nil, fmt.Errorf("update files table name %s: %w", name, err)
+		}
+	}
+
+	return file, nil
+}
+
+// GetFile returns file data from the database.
+func (s *Storage) GetFile(ctx context.Context, fileID, userID string) (*File, error) {
+	file := &File{}
+
+	err := s.conn.QueryRow(ctx, querySelectFile, fileID, userID).Scan(file)
+
+	if err != nil {
+		if IsNoRowError(err) {
+			return nil, fmt.Errorf("%s: %w", fileID, ErrFileNotFound)
+		}
+
 		return nil, fmt.Errorf("get file id %s: %w", fileID, err)
 	}
 
 	return file, nil
 }
 
-// GetAllFiles возращает все данные по сохраненным файлам
+// GetAllFiles returns all files data from the database.
 func (s *Storage) GetAllFiles(ctx context.Context, userID string) ([]File, error) {
-	query := `
-		SELECT *
-		FROM files
-		WHERE user_id = $1;
-	`
-
 	files := make([]File, 0)
 
-	rows, err := s.conn.Query(ctx, query, userID)
+	rows, err := s.conn.Query(ctx, querySelectFiles, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("query execution from table files user_id %s: %w", userID, err)
@@ -253,64 +254,84 @@ func (s *Storage) GetAllFiles(ctx context.Context, userID string) ([]File, error
 		files = append(files, file)
 	}
 
-	if len(files) == 0 {
-		return nil, fmt.Errorf("user to user_id %s don't have files", userID)
-	}
-
 	return files, nil
 }
 
-// CreateBank добавляет данные о банковской информации
-func (s *Storage) CreateBank(ctx context.Context, userID, name, banksData, meta string) (*Bank, error) {
-	query := `
-		WITH t AS (
-			INSERT INTO banks (user_id, name, banksdata, meta) VALUES ($1, $2, $3, $4)
-			RETURNING *
-		)
-		SELECT * FROM t;
-	`
+// DeleteFile delete file data in the database.
+func (s *Storage) DeleteFile(ctx context.Context, fileID, userID string) (*File, error) {
+	file := &File{}
 
-	bank := &Bank{}
-
-	err := s.conn.QueryRow(ctx, query, userID, name, banksData, meta).Scan(bank)
+	err := s.conn.QueryRow(ctx, queryDeleteFile, fileID, userID).Scan(file)
 
 	if err != nil {
-		return nil, fmt.Errorf("insert into banks table name %s: %w", name, err)
+		if IsNoRowError(err) {
+			return nil, fmt.Errorf("%s: %w", fileID, ErrFileNotFound)
+		}
+		return nil, fmt.Errorf("delete file id %s: %w", fileID, err)
+	}
+
+	return file, nil
+}
+
+// CreateBank adds bank data to the database.
+func (s *Storage) CreateBank(ctx context.Context, userID, name, number, cvc, owner, exp, meta string) (*Bank, error) {
+	bank := &Bank{}
+
+	err := s.conn.QueryRow(ctx, queryInsertBank, userID, name, number, exp, cvc, owner, meta).Scan(bank)
+
+	if err != nil {
+		if IsForeignKeyViolation(err) {
+			return nil, ErrUserNotFound
+		}
+
+		return nil, fmt.Errorf("insert into files table name %s: %w", name, err)
 	}
 
 	return bank, nil
 }
 
-// GetBank возращает данные по сохраненной банковской информации
-func (s *Storage) GetBank(ctx context.Context, bankID string) (*Bank, error) {
-	query := `
-		SELECT *
-		FROM banks
-		WHERE id = $1;
-	`
-
+// UpdateBank updates bank data in the database.
+func (s *Storage) UpdateBank(ctx context.Context, bankID, userID, name, number, cvc, owner, exp, meta string) (*Bank, error) {
 	bank := &Bank{}
 
-	err := s.conn.QueryRow(ctx, query, bankID).Scan(bank)
+	err := s.conn.QueryRow(ctx, queryUpdateBank, userID, name, number, exp, cvc, owner, meta, bankID).Scan(bank)
 
 	if err != nil {
-		return nil, fmt.Errorf("get bank data id %s: %w", bankID, err)
+		switch {
+		case IsForeignKeyViolation(err):
+			return nil, fmt.Errorf("%s: %w", userID, ErrUserNotFound)
+		case IsNoRowError(err):
+			return nil, fmt.Errorf("%s: %w", bankID, ErrBankNotFound)
+		default:
+			return nil, fmt.Errorf("update banks table name %s: %w", name, err)
+		}
 	}
 
 	return bank, nil
 }
 
-// GetAllBanks возращает все данные по сохраненным банковским информациям
+// GetBank returns bank data from the database.
+func (s *Storage) GetBank(ctx context.Context, bankID, userID string) (*Bank, error) {
+	bank := &Bank{}
+
+	err := s.conn.QueryRow(ctx, querySelectBank, bankID, userID).Scan(bank)
+
+	if err != nil {
+		if IsNoRowError(err) {
+			return nil, fmt.Errorf("%s: %w", bankID, ErrBankNotFound)
+		}
+
+		return nil, fmt.Errorf("get bank id %s: %w", bankID, err)
+	}
+
+	return bank, nil
+}
+
+// GetAllBanks returns all banks data from the database.
 func (s *Storage) GetAllBanks(ctx context.Context, userID string) ([]Bank, error) {
-	query := `
-		SELECT *
-		FROM banks
-		WHERE user_id = $1;
-	`
-
 	banks := make([]Bank, 0)
 
-	rows, err := s.conn.Query(ctx, query, userID)
+	rows, err := s.conn.Query(ctx, querySelectBanks, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("query execution from table banks user_id %s: %w", userID, err)
@@ -329,64 +350,85 @@ func (s *Storage) GetAllBanks(ctx context.Context, userID string) ([]Bank, error
 		banks = append(banks, bank)
 	}
 
-	if len(banks) == 0 {
-		return nil, fmt.Errorf("user to user_id %s don't have bank data", userID)
-	}
-
 	return banks, nil
 }
 
-// CreateText добавляет данные о тексте
-func (s *Storage) CreateText(ctx context.Context, userID, name, text, meta string) (*Text, error) {
-	query := `
-		WITH t AS (
-			INSERT INTO texts (user_id, name, text, meta) VALUES ($1, $2, $3, $4)
-			RETURNING *
-		)
-		SELECT * FROM t;
-	`
-
-	t := &Text{}
-
-	err := s.conn.QueryRow(ctx, query, userID, name, text, meta).Scan(t)
+// DeleteBank delete bank data in the database.
+func (s *Storage) DeleteBank(ctx context.Context, bankID, userID string) error {
+	bank := &Bank{}
+	err := s.conn.QueryRow(ctx, queryDeleteBank, bankID, userID).Scan(bank)
 
 	if err != nil {
+		if IsNoRowError(err) {
+			return fmt.Errorf("%s: %w", bankID, ErrBankNotFound)
+		}
+
+		return fmt.Errorf("delete bank %s: %w", bankID, err)
+	}
+
+	return nil
+}
+
+// CreateText adds text data to the database.
+func (s *Storage) CreateText(ctx context.Context, userID, name, text, meta string) (*Text, error) {
+	t := &Text{}
+
+	err := s.conn.QueryRow(ctx, queryInsertText, userID, name, text, meta).Scan(t)
+
+	if err != nil {
+		if IsForeignKeyViolation(err) {
+			return nil, ErrUserNotFound
+		}
+
 		return nil, fmt.Errorf("insert into texts table name %s: %w", name, err)
 	}
 
 	return t, nil
 }
 
-// GetText возращает данные по сохраненному тексту
-func (s *Storage) GetText(ctx context.Context, textID string) (*Text, error) {
-	query := `
-		SELECT *
-		FROM texts
-		WHERE id = $1;
-	`
+// UpdateText updates text data in the database.
+func (s *Storage) UpdateText(ctx context.Context, textID, userID, name, text, meta string) (*Text, error) {
 
 	t := &Text{}
 
-	err := s.conn.QueryRow(ctx, query, textID).Scan(t)
+	err := s.conn.QueryRow(ctx, queryUpdateText, userID, name, text, meta, textID).Scan(t)
 
 	if err != nil {
-		return nil, fmt.Errorf("get text data id %s: %w", textID, err)
+		switch {
+		case IsForeignKeyViolation(err):
+			return nil, fmt.Errorf("%s: %w", userID, ErrUserNotFound)
+		case IsNoRowError(err):
+			return nil, fmt.Errorf("%s: %w", textID, ErrTextNotFound)
+		default:
+			return nil, fmt.Errorf("update texts table name %s: %w", name, err)
+		}
 	}
 
 	return t, nil
 }
 
-// GetAllTexts возращает все данные по сохраненным текстовым данным
-func (s *Storage) GetAllTexts(ctx context.Context, userID string) ([]Text, error) {
-	query := `
-		SELECT *
-		FROM texts
-		WHERE user_id = $1;
-	`
+// GetText returns text data from the database.
+func (s *Storage) GetText(ctx context.Context, textID, userID string) (*Text, error) {
+	t := &Text{}
 
+	err := s.conn.QueryRow(ctx, querySelectText, textID, userID).Scan(t)
+
+	if err != nil {
+		if IsNoRowError(err) {
+			return nil, fmt.Errorf("%s: %w", textID, ErrTextNotFound)
+		}
+
+		return nil, fmt.Errorf("get text id %s: %w", textID, err)
+	}
+
+	return t, nil
+}
+
+// GetAllTexts returns all texts data from the database.
+func (s *Storage) GetAllTexts(ctx context.Context, userID string) ([]Text, error) {
 	texts := make([]Text, 0)
 
-	rows, err := s.conn.Query(ctx, query, userID)
+	rows, err := s.conn.Query(ctx, querySelectTexts, userID)
 
 	if err != nil {
 		return nil, fmt.Errorf("query execution from table texts user_id %s: %w", userID, err)
@@ -405,9 +447,21 @@ func (s *Storage) GetAllTexts(ctx context.Context, userID string) ([]Text, error
 		texts = append(texts, text)
 	}
 
-	if len(texts) == 0 {
-		return nil, fmt.Errorf("user to user_id %s don't have text data", userID)
+	return texts, nil
+}
+
+// DeleteText delete text data in the database.
+func (s *Storage) DeleteText(ctx context.Context, textID, userID string) error {
+	text := &Text{}
+	err := s.conn.QueryRow(ctx, queryDeleteText, textID, userID).Scan(text)
+
+	if err != nil {
+		if IsNoRowError(err) {
+			return fmt.Errorf("%s: %w", textID, ErrTextNotFound)
+		}
+
+		return fmt.Errorf("delete text %s: %w", textID, err)
 	}
 
-	return texts, nil
+	return nil
 }

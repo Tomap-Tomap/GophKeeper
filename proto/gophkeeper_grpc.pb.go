@@ -22,18 +22,27 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	GophKeeper_Register_FullMethodName       = "/gophkeeper.GophKeeper/Register"
 	GophKeeper_Auth_FullMethodName           = "/gophkeeper.GophKeeper/Auth"
+	GophKeeper_GetChunkSize_FullMethodName   = "/gophkeeper.GophKeeper/GetChunkSize"
 	GophKeeper_CreatePassword_FullMethodName = "/gophkeeper.GophKeeper/CreatePassword"
+	GophKeeper_UpdatePassword_FullMethodName = "/gophkeeper.GophKeeper/UpdatePassword"
 	GophKeeper_GetPassword_FullMethodName    = "/gophkeeper.GophKeeper/GetPassword"
 	GophKeeper_GetPasswords_FullMethodName   = "/gophkeeper.GophKeeper/GetPasswords"
+	GophKeeper_DeletePassword_FullMethodName = "/gophkeeper.GophKeeper/DeletePassword"
 	GophKeeper_CreateFile_FullMethodName     = "/gophkeeper.GophKeeper/CreateFile"
+	GophKeeper_UpdateFile_FullMethodName     = "/gophkeeper.GophKeeper/UpdateFile"
 	GophKeeper_GetFile_FullMethodName        = "/gophkeeper.GophKeeper/GetFile"
 	GophKeeper_GetFiles_FullMethodName       = "/gophkeeper.GophKeeper/GetFiles"
+	GophKeeper_DeleteFile_FullMethodName     = "/gophkeeper.GophKeeper/DeleteFile"
 	GophKeeper_CreateBank_FullMethodName     = "/gophkeeper.GophKeeper/CreateBank"
+	GophKeeper_UpdateBank_FullMethodName     = "/gophkeeper.GophKeeper/UpdateBank"
 	GophKeeper_GetBank_FullMethodName        = "/gophkeeper.GophKeeper/GetBank"
 	GophKeeper_GetBanks_FullMethodName       = "/gophkeeper.GophKeeper/GetBanks"
+	GophKeeper_DeleteBank_FullMethodName     = "/gophkeeper.GophKeeper/DeleteBank"
 	GophKeeper_CreateText_FullMethodName     = "/gophkeeper.GophKeeper/CreateText"
+	GophKeeper_UpdateText_FullMethodName     = "/gophkeeper.GophKeeper/UpdateText"
 	GophKeeper_GetText_FullMethodName        = "/gophkeeper.GophKeeper/GetText"
 	GophKeeper_GetTexts_FullMethodName       = "/gophkeeper.GophKeeper/GetTexts"
+	GophKeeper_DeleteText_FullMethodName     = "/gophkeeper.GophKeeper/DeleteText"
 )
 
 // GophKeeperClient is the client API for GophKeeper service.
@@ -42,18 +51,27 @@ const (
 type GophKeeperClient interface {
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
 	Auth(ctx context.Context, in *AuthRequest, opts ...grpc.CallOption) (*AuthResponse, error)
+	GetChunkSize(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetChunkSizeResponse, error)
 	CreatePassword(ctx context.Context, in *CreatePasswordRequest, opts ...grpc.CallOption) (*CreatePasswordResponse, error)
+	UpdatePassword(ctx context.Context, in *UpdatePasswordRequest, opts ...grpc.CallOption) (*UpdatePasswordResponse, error)
 	GetPassword(ctx context.Context, in *GetPasswordRequest, opts ...grpc.CallOption) (*GetPasswordResponse, error)
 	GetPasswords(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetPasswordsResponse, error)
+	DeletePassword(ctx context.Context, in *DeletePasswordRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	CreateFile(ctx context.Context, opts ...grpc.CallOption) (GophKeeper_CreateFileClient, error)
+	UpdateFile(ctx context.Context, opts ...grpc.CallOption) (GophKeeper_UpdateFileClient, error)
 	GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (GophKeeper_GetFileClient, error)
-	GetFiles(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (GophKeeper_GetFilesClient, error)
+	GetFiles(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetFilesResponse, error)
+	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	CreateBank(ctx context.Context, in *CreateBankRequest, opts ...grpc.CallOption) (*CreateBankResponse, error)
+	UpdateBank(ctx context.Context, in *UpdateBankRequest, opts ...grpc.CallOption) (*UpdateBankResponse, error)
 	GetBank(ctx context.Context, in *GetBankRequest, opts ...grpc.CallOption) (*GetBankResponse, error)
 	GetBanks(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetBanksResponse, error)
+	DeleteBank(ctx context.Context, in *DeleteBankRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*CreateTextResponse, error)
+	UpdateText(ctx context.Context, in *UpdateTextRequest, opts ...grpc.CallOption) (*UpdateTextResponse, error)
 	GetText(ctx context.Context, in *GetTextRequest, opts ...grpc.CallOption) (*GetTextResponse, error)
 	GetTexts(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetTextsResponse, error)
+	DeleteText(ctx context.Context, in *DeleteTextRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type gophKeeperClient struct {
@@ -82,9 +100,27 @@ func (c *gophKeeperClient) Auth(ctx context.Context, in *AuthRequest, opts ...gr
 	return out, nil
 }
 
+func (c *gophKeeperClient) GetChunkSize(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetChunkSizeResponse, error) {
+	out := new(GetChunkSizeResponse)
+	err := c.cc.Invoke(ctx, GophKeeper_GetChunkSize_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gophKeeperClient) CreatePassword(ctx context.Context, in *CreatePasswordRequest, opts ...grpc.CallOption) (*CreatePasswordResponse, error) {
 	out := new(CreatePasswordResponse)
 	err := c.cc.Invoke(ctx, GophKeeper_CreatePassword_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gophKeeperClient) UpdatePassword(ctx context.Context, in *UpdatePasswordRequest, opts ...grpc.CallOption) (*UpdatePasswordResponse, error) {
+	out := new(UpdatePasswordResponse)
+	err := c.cc.Invoke(ctx, GophKeeper_UpdatePassword_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +139,15 @@ func (c *gophKeeperClient) GetPassword(ctx context.Context, in *GetPasswordReque
 func (c *gophKeeperClient) GetPasswords(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetPasswordsResponse, error) {
 	out := new(GetPasswordsResponse)
 	err := c.cc.Invoke(ctx, GophKeeper_GetPasswords_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gophKeeperClient) DeletePassword(ctx context.Context, in *DeletePasswordRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, GophKeeper_DeletePassword_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -143,8 +188,42 @@ func (x *gophKeeperCreateFileClient) CloseAndRecv() (*CreateFileResponse, error)
 	return m, nil
 }
 
+func (c *gophKeeperClient) UpdateFile(ctx context.Context, opts ...grpc.CallOption) (GophKeeper_UpdateFileClient, error) {
+	stream, err := c.cc.NewStream(ctx, &GophKeeper_ServiceDesc.Streams[1], GophKeeper_UpdateFile_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &gophKeeperUpdateFileClient{stream}
+	return x, nil
+}
+
+type GophKeeper_UpdateFileClient interface {
+	Send(*UpdateFileRequest) error
+	CloseAndRecv() (*UpdateFileResponse, error)
+	grpc.ClientStream
+}
+
+type gophKeeperUpdateFileClient struct {
+	grpc.ClientStream
+}
+
+func (x *gophKeeperUpdateFileClient) Send(m *UpdateFileRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *gophKeeperUpdateFileClient) CloseAndRecv() (*UpdateFileResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(UpdateFileResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *gophKeeperClient) GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (GophKeeper_GetFileClient, error) {
-	stream, err := c.cc.NewStream(ctx, &GophKeeper_ServiceDesc.Streams[1], GophKeeper_GetFile_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &GophKeeper_ServiceDesc.Streams[2], GophKeeper_GetFile_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,41 +254,36 @@ func (x *gophKeeperGetFileClient) Recv() (*GetFileResponse, error) {
 	return m, nil
 }
 
-func (c *gophKeeperClient) GetFiles(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (GophKeeper_GetFilesClient, error) {
-	stream, err := c.cc.NewStream(ctx, &GophKeeper_ServiceDesc.Streams[2], GophKeeper_GetFiles_FullMethodName, opts...)
+func (c *gophKeeperClient) GetFiles(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*GetFilesResponse, error) {
+	out := new(GetFilesResponse)
+	err := c.cc.Invoke(ctx, GophKeeper_GetFiles_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &gophKeeperGetFilesClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
+	return out, nil
 }
 
-type GophKeeper_GetFilesClient interface {
-	Recv() (*GetFilesResponse, error)
-	grpc.ClientStream
-}
-
-type gophKeeperGetFilesClient struct {
-	grpc.ClientStream
-}
-
-func (x *gophKeeperGetFilesClient) Recv() (*GetFilesResponse, error) {
-	m := new(GetFilesResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
+func (c *gophKeeperClient) DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, GophKeeper_DeleteFile_FullMethodName, in, out, opts...)
+	if err != nil {
 		return nil, err
 	}
-	return m, nil
+	return out, nil
 }
 
 func (c *gophKeeperClient) CreateBank(ctx context.Context, in *CreateBankRequest, opts ...grpc.CallOption) (*CreateBankResponse, error) {
 	out := new(CreateBankResponse)
 	err := c.cc.Invoke(ctx, GophKeeper_CreateBank_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gophKeeperClient) UpdateBank(ctx context.Context, in *UpdateBankRequest, opts ...grpc.CallOption) (*UpdateBankResponse, error) {
+	out := new(UpdateBankResponse)
+	err := c.cc.Invoke(ctx, GophKeeper_UpdateBank_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -234,9 +308,27 @@ func (c *gophKeeperClient) GetBanks(ctx context.Context, in *empty.Empty, opts .
 	return out, nil
 }
 
+func (c *gophKeeperClient) DeleteBank(ctx context.Context, in *DeleteBankRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, GophKeeper_DeleteBank_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gophKeeperClient) CreateText(ctx context.Context, in *CreateTextRequest, opts ...grpc.CallOption) (*CreateTextResponse, error) {
 	out := new(CreateTextResponse)
 	err := c.cc.Invoke(ctx, GophKeeper_CreateText_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gophKeeperClient) UpdateText(ctx context.Context, in *UpdateTextRequest, opts ...grpc.CallOption) (*UpdateTextResponse, error) {
+	out := new(UpdateTextResponse)
+	err := c.cc.Invoke(ctx, GophKeeper_UpdateText_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -261,24 +353,42 @@ func (c *gophKeeperClient) GetTexts(ctx context.Context, in *empty.Empty, opts .
 	return out, nil
 }
 
+func (c *gophKeeperClient) DeleteText(ctx context.Context, in *DeleteTextRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
+	err := c.cc.Invoke(ctx, GophKeeper_DeleteText_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GophKeeperServer is the server API for GophKeeper service.
 // All implementations must embed UnimplementedGophKeeperServer
 // for forward compatibility
 type GophKeeperServer interface {
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
 	Auth(context.Context, *AuthRequest) (*AuthResponse, error)
+	GetChunkSize(context.Context, *empty.Empty) (*GetChunkSizeResponse, error)
 	CreatePassword(context.Context, *CreatePasswordRequest) (*CreatePasswordResponse, error)
+	UpdatePassword(context.Context, *UpdatePasswordRequest) (*UpdatePasswordResponse, error)
 	GetPassword(context.Context, *GetPasswordRequest) (*GetPasswordResponse, error)
 	GetPasswords(context.Context, *empty.Empty) (*GetPasswordsResponse, error)
+	DeletePassword(context.Context, *DeletePasswordRequest) (*empty.Empty, error)
 	CreateFile(GophKeeper_CreateFileServer) error
+	UpdateFile(GophKeeper_UpdateFileServer) error
 	GetFile(*GetFileRequest, GophKeeper_GetFileServer) error
-	GetFiles(*empty.Empty, GophKeeper_GetFilesServer) error
+	GetFiles(context.Context, *empty.Empty) (*GetFilesResponse, error)
+	DeleteFile(context.Context, *DeleteFileRequest) (*empty.Empty, error)
 	CreateBank(context.Context, *CreateBankRequest) (*CreateBankResponse, error)
+	UpdateBank(context.Context, *UpdateBankRequest) (*UpdateBankResponse, error)
 	GetBank(context.Context, *GetBankRequest) (*GetBankResponse, error)
 	GetBanks(context.Context, *empty.Empty) (*GetBanksResponse, error)
+	DeleteBank(context.Context, *DeleteBankRequest) (*empty.Empty, error)
 	CreateText(context.Context, *CreateTextRequest) (*CreateTextResponse, error)
+	UpdateText(context.Context, *UpdateTextRequest) (*UpdateTextResponse, error)
 	GetText(context.Context, *GetTextRequest) (*GetTextResponse, error)
 	GetTexts(context.Context, *empty.Empty) (*GetTextsResponse, error)
+	DeleteText(context.Context, *DeleteTextRequest) (*empty.Empty, error)
 	mustEmbedUnimplementedGophKeeperServer()
 }
 
@@ -292,8 +402,14 @@ func (UnimplementedGophKeeperServer) Register(context.Context, *RegisterRequest)
 func (UnimplementedGophKeeperServer) Auth(context.Context, *AuthRequest) (*AuthResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Auth not implemented")
 }
+func (UnimplementedGophKeeperServer) GetChunkSize(context.Context, *empty.Empty) (*GetChunkSizeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChunkSize not implemented")
+}
 func (UnimplementedGophKeeperServer) CreatePassword(context.Context, *CreatePasswordRequest) (*CreatePasswordResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreatePassword not implemented")
+}
+func (UnimplementedGophKeeperServer) UpdatePassword(context.Context, *UpdatePasswordRequest) (*UpdatePasswordResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdatePassword not implemented")
 }
 func (UnimplementedGophKeeperServer) GetPassword(context.Context, *GetPasswordRequest) (*GetPasswordResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPassword not implemented")
@@ -301,17 +417,29 @@ func (UnimplementedGophKeeperServer) GetPassword(context.Context, *GetPasswordRe
 func (UnimplementedGophKeeperServer) GetPasswords(context.Context, *empty.Empty) (*GetPasswordsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPasswords not implemented")
 }
+func (UnimplementedGophKeeperServer) DeletePassword(context.Context, *DeletePasswordRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeletePassword not implemented")
+}
 func (UnimplementedGophKeeperServer) CreateFile(GophKeeper_CreateFileServer) error {
 	return status.Errorf(codes.Unimplemented, "method CreateFile not implemented")
+}
+func (UnimplementedGophKeeperServer) UpdateFile(GophKeeper_UpdateFileServer) error {
+	return status.Errorf(codes.Unimplemented, "method UpdateFile not implemented")
 }
 func (UnimplementedGophKeeperServer) GetFile(*GetFileRequest, GophKeeper_GetFileServer) error {
 	return status.Errorf(codes.Unimplemented, "method GetFile not implemented")
 }
-func (UnimplementedGophKeeperServer) GetFiles(*empty.Empty, GophKeeper_GetFilesServer) error {
-	return status.Errorf(codes.Unimplemented, "method GetFiles not implemented")
+func (UnimplementedGophKeeperServer) GetFiles(context.Context, *empty.Empty) (*GetFilesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFiles not implemented")
+}
+func (UnimplementedGophKeeperServer) DeleteFile(context.Context, *DeleteFileRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteFile not implemented")
 }
 func (UnimplementedGophKeeperServer) CreateBank(context.Context, *CreateBankRequest) (*CreateBankResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateBank not implemented")
+}
+func (UnimplementedGophKeeperServer) UpdateBank(context.Context, *UpdateBankRequest) (*UpdateBankResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateBank not implemented")
 }
 func (UnimplementedGophKeeperServer) GetBank(context.Context, *GetBankRequest) (*GetBankResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBank not implemented")
@@ -319,14 +447,23 @@ func (UnimplementedGophKeeperServer) GetBank(context.Context, *GetBankRequest) (
 func (UnimplementedGophKeeperServer) GetBanks(context.Context, *empty.Empty) (*GetBanksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBanks not implemented")
 }
+func (UnimplementedGophKeeperServer) DeleteBank(context.Context, *DeleteBankRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteBank not implemented")
+}
 func (UnimplementedGophKeeperServer) CreateText(context.Context, *CreateTextRequest) (*CreateTextResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateText not implemented")
+}
+func (UnimplementedGophKeeperServer) UpdateText(context.Context, *UpdateTextRequest) (*UpdateTextResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateText not implemented")
 }
 func (UnimplementedGophKeeperServer) GetText(context.Context, *GetTextRequest) (*GetTextResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetText not implemented")
 }
 func (UnimplementedGophKeeperServer) GetTexts(context.Context, *empty.Empty) (*GetTextsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTexts not implemented")
+}
+func (UnimplementedGophKeeperServer) DeleteText(context.Context, *DeleteTextRequest) (*empty.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteText not implemented")
 }
 func (UnimplementedGophKeeperServer) mustEmbedUnimplementedGophKeeperServer() {}
 
@@ -377,6 +514,24 @@ func _GophKeeper_Auth_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GophKeeper_GetChunkSize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).GetChunkSize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_GetChunkSize_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).GetChunkSize(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GophKeeper_CreatePassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreatePasswordRequest)
 	if err := dec(in); err != nil {
@@ -391,6 +546,24 @@ func _GophKeeper_CreatePassword_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GophKeeperServer).CreatePassword(ctx, req.(*CreatePasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GophKeeper_UpdatePassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdatePasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).UpdatePassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_UpdatePassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).UpdatePassword(ctx, req.(*UpdatePasswordRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -431,6 +604,24 @@ func _GophKeeper_GetPasswords_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GophKeeper_DeletePassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeletePasswordRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).DeletePassword(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_DeletePassword_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).DeletePassword(ctx, req.(*DeletePasswordRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GophKeeper_CreateFile_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(GophKeeperServer).CreateFile(&gophKeeperCreateFileServer{stream})
 }
@@ -451,6 +642,32 @@ func (x *gophKeeperCreateFileServer) SendAndClose(m *CreateFileResponse) error {
 
 func (x *gophKeeperCreateFileServer) Recv() (*CreateFileRequest, error) {
 	m := new(CreateFileRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _GophKeeper_UpdateFile_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(GophKeeperServer).UpdateFile(&gophKeeperUpdateFileServer{stream})
+}
+
+type GophKeeper_UpdateFileServer interface {
+	SendAndClose(*UpdateFileResponse) error
+	Recv() (*UpdateFileRequest, error)
+	grpc.ServerStream
+}
+
+type gophKeeperUpdateFileServer struct {
+	grpc.ServerStream
+}
+
+func (x *gophKeeperUpdateFileServer) SendAndClose(m *UpdateFileResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *gophKeeperUpdateFileServer) Recv() (*UpdateFileRequest, error) {
+	m := new(UpdateFileRequest)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -478,25 +695,40 @@ func (x *gophKeeperGetFileServer) Send(m *GetFileResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _GophKeeper_GetFiles_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(empty.Empty)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
+func _GophKeeper_GetFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
 	}
-	return srv.(GophKeeperServer).GetFiles(m, &gophKeeperGetFilesServer{stream})
+	if interceptor == nil {
+		return srv.(GophKeeperServer).GetFiles(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_GetFiles_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).GetFiles(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-type GophKeeper_GetFilesServer interface {
-	Send(*GetFilesResponse) error
-	grpc.ServerStream
-}
-
-type gophKeeperGetFilesServer struct {
-	grpc.ServerStream
-}
-
-func (x *gophKeeperGetFilesServer) Send(m *GetFilesResponse) error {
-	return x.ServerStream.SendMsg(m)
+func _GophKeeper_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).DeleteFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_DeleteFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).DeleteFile(ctx, req.(*DeleteFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _GophKeeper_CreateBank_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -513,6 +745,24 @@ func _GophKeeper_CreateBank_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GophKeeperServer).CreateBank(ctx, req.(*CreateBankRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GophKeeper_UpdateBank_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateBankRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).UpdateBank(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_UpdateBank_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).UpdateBank(ctx, req.(*UpdateBankRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -553,6 +803,24 @@ func _GophKeeper_GetBanks_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GophKeeper_DeleteBank_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteBankRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).DeleteBank(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_DeleteBank_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).DeleteBank(ctx, req.(*DeleteBankRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GophKeeper_CreateText_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateTextRequest)
 	if err := dec(in); err != nil {
@@ -567,6 +835,24 @@ func _GophKeeper_CreateText_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GophKeeperServer).CreateText(ctx, req.(*CreateTextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GophKeeper_UpdateText_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateTextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).UpdateText(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_UpdateText_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).UpdateText(ctx, req.(*UpdateTextRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -607,6 +893,24 @@ func _GophKeeper_GetTexts_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GophKeeper_DeleteText_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteTextRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GophKeeperServer).DeleteText(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GophKeeper_DeleteText_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GophKeeperServer).DeleteText(ctx, req.(*DeleteTextRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // GophKeeper_ServiceDesc is the grpc.ServiceDesc for GophKeeper service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -623,8 +927,16 @@ var GophKeeper_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GophKeeper_Auth_Handler,
 		},
 		{
+			MethodName: "GetChunkSize",
+			Handler:    _GophKeeper_GetChunkSize_Handler,
+		},
+		{
 			MethodName: "CreatePassword",
 			Handler:    _GophKeeper_CreatePassword_Handler,
+		},
+		{
+			MethodName: "UpdatePassword",
+			Handler:    _GophKeeper_UpdatePassword_Handler,
 		},
 		{
 			MethodName: "GetPassword",
@@ -635,8 +947,24 @@ var GophKeeper_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GophKeeper_GetPasswords_Handler,
 		},
 		{
+			MethodName: "DeletePassword",
+			Handler:    _GophKeeper_DeletePassword_Handler,
+		},
+		{
+			MethodName: "GetFiles",
+			Handler:    _GophKeeper_GetFiles_Handler,
+		},
+		{
+			MethodName: "DeleteFile",
+			Handler:    _GophKeeper_DeleteFile_Handler,
+		},
+		{
 			MethodName: "CreateBank",
 			Handler:    _GophKeeper_CreateBank_Handler,
+		},
+		{
+			MethodName: "UpdateBank",
+			Handler:    _GophKeeper_UpdateBank_Handler,
 		},
 		{
 			MethodName: "GetBank",
@@ -647,8 +975,16 @@ var GophKeeper_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _GophKeeper_GetBanks_Handler,
 		},
 		{
+			MethodName: "DeleteBank",
+			Handler:    _GophKeeper_DeleteBank_Handler,
+		},
+		{
 			MethodName: "CreateText",
 			Handler:    _GophKeeper_CreateText_Handler,
+		},
+		{
+			MethodName: "UpdateText",
+			Handler:    _GophKeeper_UpdateText_Handler,
 		},
 		{
 			MethodName: "GetText",
@@ -658,6 +994,10 @@ var GophKeeper_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetTexts",
 			Handler:    _GophKeeper_GetTexts_Handler,
 		},
+		{
+			MethodName: "DeleteText",
+			Handler:    _GophKeeper_DeleteText_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
@@ -666,13 +1006,13 @@ var GophKeeper_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 		{
-			StreamName:    "GetFile",
-			Handler:       _GophKeeper_GetFile_Handler,
-			ServerStreams: true,
+			StreamName:    "UpdateFile",
+			Handler:       _GophKeeper_UpdateFile_Handler,
+			ClientStreams: true,
 		},
 		{
-			StreamName:    "GetFiles",
-			Handler:       _GophKeeper_GetFiles_Handler,
+			StreamName:    "GetFile",
+			Handler:       _GophKeeper_GetFile_Handler,
 			ServerStreams: true,
 		},
 	},

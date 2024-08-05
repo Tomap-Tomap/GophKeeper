@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func RunGPRCTestServer(t *testing.T, tokener Tokener) (addr string, stopFunc fun
 	)
 
 	go func() {
-		if err := s.Serve(lis); err != nil {
+		if err := s.Serve(lis); err != nil && err != http.ErrServerClosed {
 			require.FailNow(t, err.Error())
 		}
 	}()
@@ -58,7 +59,7 @@ func CreateGRPCTestClient(t *testing.T, addr string) (client testgrpc.TestServic
 }
 
 func TestTokener_GetToken(t *testing.T) {
-	tokener := NewTokener("secret", time.Duration(1))
+	tokener := NewTokener([]byte("secret"), time.Duration(1))
 
 	token, err := tokener.GetToken("sub")
 	require.NoError(t, err)
@@ -66,7 +67,7 @@ func TestTokener_GetToken(t *testing.T) {
 }
 
 func TestTokener_authByGRPCContext(t *testing.T) {
-	tokener := NewTokener("secret", time.Duration(1*time.Hour))
+	tokener := NewTokener([]byte("secret"), time.Duration(1*time.Hour))
 
 	t.Run("mssing md error", func(t *testing.T) {
 		ctx := context.Background()
@@ -121,7 +122,7 @@ func TestTokener_authByGRPCContext(t *testing.T) {
 }
 
 func TestTokener_getSubFromToken(t *testing.T) {
-	tokener := NewTokener("secret", time.Duration(1*time.Hour))
+	tokener := NewTokener([]byte("secret"), time.Duration(1*time.Hour))
 
 	t.Run("unexpected signing method error", func(t *testing.T) {
 		token := jwt.NewWithClaims(
@@ -134,8 +135,8 @@ func TestTokener_getSubFromToken(t *testing.T) {
 		tokenString, err := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
 		require.NoError(t, err)
 
-		sub, ok := tokener.getSubFromToken(tokenString)
-		assert.False(t, ok)
+		sub, err := tokener.getSubFromToken(tokenString)
+		assert.Error(t, err)
 		assert.Empty(t, sub)
 	})
 
@@ -144,14 +145,14 @@ func TestTokener_getSubFromToken(t *testing.T) {
 		token, err := tokener.GetToken(sub)
 		require.NoError(t, err)
 
-		subGot, ok := tokener.getSubFromToken(token)
-		assert.True(t, ok)
+		subGot, err := tokener.getSubFromToken(token)
+		assert.NoError(t, err)
 		assert.Equal(t, sub, subGot)
 	})
 }
 
 func TestTokener_UnaryServerInterceptor(t *testing.T) {
-	tokener := NewTokener("secret", time.Duration(1*time.Hour))
+	tokener := NewTokener([]byte("secret"), time.Duration(1*time.Hour))
 
 	addr, stopServer := RunGPRCTestServer(t, *tokener)
 	defer stopServer()
@@ -175,7 +176,7 @@ func TestTokener_UnaryServerInterceptor(t *testing.T) {
 }
 
 func TestTokener_StreamServerInterceptor(t *testing.T) {
-	tokener := NewTokener("secret", time.Duration(1*time.Hour))
+	tokener := NewTokener([]byte("secret"), time.Duration(1*time.Hour))
 
 	addr, stopServer := RunGPRCTestServer(t, *tokener)
 	defer stopServer()

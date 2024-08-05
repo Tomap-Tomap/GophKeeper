@@ -67,7 +67,10 @@ CREATE TABLE banks (
     id UUID NOT NULL,
     user_id UUID REFERENCES users(id) NOT NULL,
     name VARCHAR(150),
-    banksData VARCHAR(150),
+    cardnumber VARCHAR(150),
+    exp VARCHAR(150),
+    cvc VARCHAR(150),
+    owner VARCHAR(150),
     meta TEXT,
     updateAt TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY(id)

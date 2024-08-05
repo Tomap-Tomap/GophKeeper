@@ -18,6 +18,8 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+
+	_ "google.golang.org/grpc/encoding/gzip"
 )
 
 func main() {
@@ -39,7 +41,7 @@ func main() {
 	}
 
 	h := hasher.NewHasher()
-	t := tokener.NewTokener(p.TokenSecret, time.Duration(time.Duration(p.TokenDuration)*time.Minute))
+	t := tokener.NewTokener([]byte(p.TokenSecret), time.Duration(time.Duration(p.TokenDuration)*time.Minute))
 
 	fs := storage.NewFileStorage(p.PathToFileStorage, int(p.ChunkSize))
 
@@ -59,7 +61,7 @@ func main() {
 		),
 	)
 
-	proto.RegisterGophKeeperServer(gs, handlers.NewGophKeeperHandler(s, h, t, fs))
+	proto.RegisterGophKeeperServer(gs, handlers.NewGophKeeperHandler(s, h, t, fs, *storage.NewRetryPolicy(3, 5, 3), 75))
 
 	eg.Go(func() error {
 		err := gs.Serve(listen)
