@@ -5,20 +5,9 @@ on:
 
 jobs:
 
-  unittests:
-    runs-on: ubuntu-latest    
+  codecov:
+    runs-on: ubuntu-latest
     container: golang:1.22
-
-    steps:
-      - uses: actions/checkout@v4  
-
-      - name: Unit test
-        run: |
-          go test ./... -tags=unit -v
-
-  integrationtests:
-    runs-on: ubuntu-latest    
-    container: golang:1.22  
     env:
       DSN: "host=postgres port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
 
@@ -33,26 +22,23 @@ jobs:
             --health-cmd pg_isready
             --health-interval 5s
             --health-timeout 5s
-            --health-retries 5    
-            
-    steps:
-      - uses: actions/checkout@v4  
+            --health-retries 5
 
+    steps:
+      - uses: actions/checkout@v4 
       - name: Install goose
         run: |
-          go install github.com/pressly/goose/v3/cmd/goose@latest
-
+          go install github.com/pressly/goose/v3/cmd/goose@latest  
       - name: Miration
         env:
           GOOSE_DRIVER: postgres
-          GOOSE_DBSTRING: ${{ env.DSN }}
+          GOOSE_DBSTRING: ${{ env.DSN }} 
           GOOSE_MIGRATION_DIR: ./db/
         run: |
-          goose up
-
-      - name: Integration test
+          goose up      
+      - name: Run coverage
         env:
           TEST_DSN: ${{ env.DSN }}
-        run: |
-          go test ./... -tags=integration -v        
-    
+        run: go test $(go list -buildvcs=false ./... | grep -v /proto) -race -tags=unit,integration -coverprofile=coverage.out -covermode=atomic
+      - name: Check coverage
+        run: go tool cover -func coverage.out | grep total | awk -v c=2 '{c=!($3>80)}END{exit c}'

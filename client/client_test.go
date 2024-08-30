@@ -1530,6 +1530,12 @@ func (suite *ClientTestSuite) TestDeleteFile() {
 }
 
 func TestClientTestSuite(t *testing.T) {
+	err := os.Mkdir("testdata", os.ModeAppend)
+	require.NoError(t, err)
+	defer func() {
+		err := os.Remove("testdata")
+		require.NoError(t, err)
+	}()
 	f, err := os.Create("./testdata/testfile")
 	require.NoError(t, err)
 	defer func() {

@@ -17,7 +17,6 @@ import (
 	"github.com/Tomap-Tomap/GophKeeper/crypto"
 	"github.com/Tomap-Tomap/GophKeeper/proto"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding/gzip"
@@ -103,27 +102,24 @@ func (c *Client) GetAllPasswords(ctx context.Context) ([]storage.Password, error
 		return nil, fmt.Errorf("cannot get passwords: %w", err)
 	}
 
-	eg := errgroup.Group{}
-
 	pwds := make([]storage.Password, 0, len(res.GetPasswords()))
 
+	var errs error
+
 	for _, v := range res.GetPasswords() {
-		eg.Go(func() error {
-			pwd, err := c.openPassword(v)
+		pwd, err := c.openPassword(v)
 
-			if err != nil {
-				return fmt.Errorf("cannot open password data: %w", err)
-			}
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("cannot open password data: %w", err))
+			continue
+		}
 
-			pwds = append(pwds, pwd)
-
-			return nil
-		})
+		pwds = append(pwds, pwd)
 
 	}
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	if errs != nil {
+		return nil, errs
 	}
 
 	return pwds, nil
@@ -194,25 +190,23 @@ func (c *Client) GetAllBanks(ctx context.Context) ([]storage.Bank, error) {
 		return nil, fmt.Errorf("cannot get banks: %w", err)
 	}
 
-	eg := errgroup.Group{}
 	banks := make([]storage.Bank, 0, len(res.GetBanks()))
 
+	var errs error
+
 	for _, v := range res.GetBanks() {
-		eg.Go(func() error {
-			bank, err := c.openBank(v)
+		bank, err := c.openBank(v)
 
-			if err != nil {
-				return fmt.Errorf("cannot open bank's data: %w", err)
-			}
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("cannot open bank's data: %w", err))
+		}
 
-			banks = append(banks, bank)
+		banks = append(banks, bank)
 
-			return nil
-		})
 	}
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	if errs != nil {
+		return nil, errs
 	}
 
 	return banks, nil
@@ -285,22 +279,20 @@ func (c *Client) GetAllTexts(ctx context.Context) ([]storage.Text, error) {
 		return nil, fmt.Errorf("cannot get texts: %w", err)
 	}
 
-	eg := errgroup.Group{}
 	texts := make([]storage.Text, 0, len(res.GetTexts()))
 
+	var errs error
+
 	for _, v := range res.GetTexts() {
-		eg.Go(func() error {
-			text, err := c.openText(v)
-			if err != nil {
-				return fmt.Errorf("cannot open text data: %w", err)
-			}
-			texts = append(texts, text)
-			return nil
-		})
+		text, err := c.openText(v)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("cannot open text data: %w", err))
+		}
+		texts = append(texts, text)
 	}
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	if errs != nil {
+		return nil, errs
 	}
 
 	return texts, nil
@@ -367,22 +359,19 @@ func (c *Client) GetAllFiles(ctx context.Context) ([]storage.File, error) {
 		return nil, fmt.Errorf("cannot get files: %w", err)
 	}
 
-	eg := errgroup.Group{}
 	files := make([]storage.File, 0, len(res.GetFileInfo()))
+	var errs error
 
 	for _, v := range res.GetFileInfo() {
-		eg.Go(func() error {
-			file, err := c.openFile(v)
-			if err != nil {
-				return fmt.Errorf("cannot open file data: %w", err)
-			}
-			files = append(files, file)
-			return nil
-		})
+		file, err := c.openFile(v)
+		if err != nil {
+			errs = errors.Join(errs, fmt.Errorf("cannot open file data: %w", err))
+		}
+		files = append(files, file)
 	}
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	if errs != nil {
+		return nil, errs
 	}
 
 	return files, nil
