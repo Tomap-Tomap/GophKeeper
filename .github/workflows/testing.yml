@@ -1,11 +1,7 @@
-name: ci
+name: testing
 
 on: 
   pull_request:
-
-env:
-  VERSION: 0.0.1
-  APP_NAME: gophkeeper
 
 jobs:
   testing:
@@ -46,26 +42,3 @@ jobs:
       - name: Check coverage
         run: go tool cover -func coverage.out | grep total | awk -v c=2 '{c=!($3>80)}END{exit c}'
   
-  buildLinux:
-    needs: [testing]
-    runs-on: ubuntu-latest
-    container: golang:1.22
-    
-    steps:
-      - uses: actions/checkout@v4.1.7
-      - name: Get current date
-        id: date
-        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
-      - name: Build
-        working-directory: ./cmd/client
-        run: go build -ldflags "-X main.buildVersion=${{ env.VERSION }} -X 'main.buildDate=${{ steps.date.outputs.date }}' -X 'main.buildCommit=$GITHUB_SHA'" -o ${{ env.APP_NAME }} cmd/client/main.go
-      - name: Release
-        id: release
-        uses: ncipollo/release-action@v1
-        with:
-          tag: ${{ env.APP_NAME }}_${{github.run_number}}
-          allowUpdates: true
-          name: ${{ github.ref != 'refs/heads/main' && '[DEV] ' || '' }}${{ env.APP_NAME }} v${{env.VERSION}}
-          prerelease: ${{ github.ref != 'refs/heads/main' }}
-          artifacts: '*.zip'
-          commit: ${{github.ref}}
