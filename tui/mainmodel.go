@@ -24,10 +24,12 @@ import (
 
 var helpStyle = lipgloss.NewStyle().Foreground(colors.HelpColor)
 
+// Messager is an interface for getting the model
 type Messager interface {
 	GetModel() (Model, tea.Cmd, string)
 }
 
+// Model represents the main model for the TUI application
 type Model struct {
 	ctx context.Context
 
@@ -42,6 +44,7 @@ type Model struct {
 	helpText string
 }
 
+// NewMainModel creates a new main model for the TUI application
 func NewMainModel(ctx context.Context, buildInfo buildinfo.BuildInfo, dir string) Model {
 	welcomeMessage := strings.Builder{}
 	welcomeMessage.WriteString("Welcome to Goph Keeper! ")
@@ -76,10 +79,12 @@ func NewMainModel(ctx context.Context, buildInfo buildinfo.BuildInfo, dir string
 	}
 }
 
+// Init initializes the model
 func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+// Update updates the model based on the received message
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -122,7 +127,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, commands.Error(err)
 		}
 
-		m.currentModel, err = tabsmodel.New([]tablemodel.Columner{
+		currentModel, err := tabsmodel.New([]tablemodel.Columner{
 			columns.NewPasswordColumns(m.ctx, client),
 			columns.NewBanksColumns(m.ctx, client),
 			columns.NewTextColumns(m.ctx, client),
@@ -133,6 +138,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, commands.Error(err)
 		}
 
+		m.currentModel = currentModel
 		return m, tea.Batch(commands.SetWindowSize(), m.currentModel.Init())
 	case messages.Registration:
 		client, err := newGrpcClient(m.config)
@@ -147,7 +153,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, commands.Error(err)
 		}
 
-		m.currentModel, err = tabsmodel.New([]tablemodel.Columner{
+		currentModel, err := tabsmodel.New([]tablemodel.Columner{
 			columns.NewPasswordColumns(m.ctx, client),
 			columns.NewBanksColumns(m.ctx, client),
 			columns.NewTextColumns(m.ctx, client),
@@ -158,6 +164,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, commands.Error(err)
 		}
 
+		m.currentModel = currentModel
 		return m, tea.Batch(commands.SetWindowSize(), m.currentModel.Init())
 	case messages.Info:
 		m.infoText = msg.Info
@@ -171,6 +178,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// View returns the view of the model as a string
 func (m Model) View() string {
 	infoBorder := m.infoBorder.Render(m.infoText + " " + helpStyle.Render(m.helpText))
 	modelView := lipgloss.JoinVertical(lipgloss.Center, m.currentModel.View(), infoBorder)

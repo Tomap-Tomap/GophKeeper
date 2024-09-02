@@ -1,3 +1,6 @@
+// Package tui provides a text-based user interface for the Gophkeeper application.
+// It includes functions to initialize and run the TUI program, handle user input,
+// and display information to the user.
 package tui
 
 import (
@@ -13,6 +16,7 @@ import (
 
 const applicationFolder = ".gophkeeper"
 
+// Run initializes and runs the TUI program with the provided context and build information.
 func Run(ctx context.Context, buildInfo buildinfo.BuildInfo) error {
 	dir, err := createApplicationFolder()
 
