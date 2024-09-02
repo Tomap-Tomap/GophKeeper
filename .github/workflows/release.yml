@@ -45,4 +45,3 @@ jobs:
             ./cmd/client/windows_${{ env.APP_NAME }}.exe
             ./cmd/client/darwin_${{ env.APP_NAME }}
           prerelease: ${{ github.ref != 'refs/heads/master' }}  
-          

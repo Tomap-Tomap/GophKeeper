@@ -18,7 +18,7 @@ func textInputCmd(inputs []textinput.Model, authCmd func(values []string) tea.Cm
 func registrationCmd(values []string) tea.Cmd {
 	var login, password string
 
-	if values != nil && len(values) == 2 {
+	if len(values) == 2 {
 		login, password = values[0], values[1]
 	}
 
@@ -33,7 +33,7 @@ func registrationCmd(values []string) tea.Cmd {
 func signinCmd(values []string) tea.Cmd {
 	var login, password string
 
-	if values != nil && len(values) == 2 {
+	if len(values) == 2 {
 		login, password = values[0], values[1]
 	}
 

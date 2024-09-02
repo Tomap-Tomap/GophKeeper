@@ -49,8 +49,6 @@ type Model struct {
 	columns    Columner
 	columsSize tea.WindowSizeMsg
 
-	textinput tea.Model
-
 	status    status
 	returnCmd tea.Cmd
 }
