@@ -378,7 +378,7 @@ func (c *Client) GetAllFiles(ctx context.Context) ([]storage.File, error) {
 }
 
 // CreateFile creates a new file entry with the given details.
-func (c *Client) CreateFile(ctx context.Context, name, pathToFile, meta string) error {
+func (c *Client) CreateFile(ctx context.Context, name, pathToFile, meta string) (err error) {
 	chunkSize, err := c.grpc.GetChunkSize(ctx, &emptypb.Empty{})
 
 	if err != nil {
@@ -418,7 +418,9 @@ func (c *Client) CreateFile(ctx context.Context, name, pathToFile, meta string) 
 		return fmt.Errorf("cannot open file by path %s: %w", pathToFile, err)
 	}
 
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	buf := make([]byte, chunkSize.GetSize())
 
@@ -469,7 +471,7 @@ func (c *Client) CreateFile(ctx context.Context, name, pathToFile, meta string) 
 }
 
 // UpdateFile updates an existing file entry with the given details.
-func (c *Client) UpdateFile(ctx context.Context, id, name, pathToFile, meta string) error {
+func (c *Client) UpdateFile(ctx context.Context, id, name, pathToFile, meta string) (err error) {
 	chunkSize, err := c.grpc.GetChunkSize(ctx, &emptypb.Empty{})
 	if err != nil {
 		return fmt.Errorf("cannot get chunk size: %w", err)
@@ -504,7 +506,9 @@ func (c *Client) UpdateFile(ctx context.Context, id, name, pathToFile, meta stri
 	if err != nil {
 		return fmt.Errorf("cannot open file by path %s: %w", pathToFile, err)
 	}
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	buf := make([]byte, chunkSize.GetSize())
 
@@ -550,7 +554,7 @@ func (c *Client) UpdateFile(ctx context.Context, id, name, pathToFile, meta stri
 }
 
 // GetFile retrieves a file by its ID and saves it to the specified path.
-func (c *Client) GetFile(ctx context.Context, id, pathToFile string) error {
+func (c *Client) GetFile(ctx context.Context, id, pathToFile string) (err error) {
 	stream, err := c.grpc.GetFile(ctx, &proto.GetFileRequest{
 		Id: id,
 	})
@@ -572,7 +576,9 @@ func (c *Client) GetFile(ctx context.Context, id, pathToFile string) error {
 		return fmt.Errorf("cannot create file %s: %w", filePath, err)
 	}
 
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	w := bufio.NewWriter(file)
 

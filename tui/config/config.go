@@ -39,7 +39,7 @@ func New(folderPath string) (config *Config, err error) {
 }
 
 // Save writes the Config instance to the configuration file in the directory.
-func (c *Config) Save() error {
+func (c *Config) Save() (err error) {
 	pathToConfig := filepath.Join(c.folderPath, configName)
 	file, err := os.Create(pathToConfig)
 
@@ -47,7 +47,9 @@ func (c *Config) Save() error {
 		return fmt.Errorf("cannot create config file: %w", err)
 	}
 
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	je := json.NewEncoder(file)
 
@@ -60,7 +62,7 @@ func (c *Config) Save() error {
 	return nil
 }
 
-func parseConfig(folderPath string) (*Config, error) {
+func parseConfig(folderPath string) (config *Config, err error) {
 	pathToConfig := filepath.Join(folderPath, configName)
 	file, err := os.Open(pathToConfig)
 
@@ -68,9 +70,11 @@ func parseConfig(folderPath string) (*Config, error) {
 		return nil, fmt.Errorf("cannot open config file: %w", err)
 	}
 
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
-	config := &Config{
+	config = &Config{
 		folderPath: folderPath,
 	}
 

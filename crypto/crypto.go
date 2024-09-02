@@ -35,23 +35,25 @@ type Crypter struct {
 
 // NewCrypter creates a new AES key, saves it in the specified folder,
 // and returns a new Crypter instance along with the path to the AES key.
-func NewCrypter(keySize int, folderToSave string) (*Crypter, string, error) {
+func NewCrypter(keySize int, folderToSave string) (crypter *Crypter, pathToKey string, err error) {
 	b := make([]byte, keySize)
 
-	_, err := rand.Read(b)
+	_, err = rand.Read(b)
 
 	if err != nil {
 		return nil, "", fmt.Errorf("cannot generate secret key: %w", err)
 	}
 
-	pathToKey := filepath.Join(folderToSave, "key.aes")
+	pathToKey = filepath.Join(folderToSave, "key.aes")
 	file, err := os.Create(pathToKey)
 
 	if err != nil {
 		return nil, "", fmt.Errorf("cannot create key file: %w", err)
 	}
 
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	_, err = file.Write(b)
 
@@ -71,14 +73,16 @@ func NewCrypter(keySize int, folderToSave string) (*Crypter, string, error) {
 }
 
 // NewCrypterByFile creates a new Crypter instance using an AES key stored in the provided file path.
-func NewCrypterByFile(pathToKey string) (*Crypter, error) {
+func NewCrypterByFile(pathToKey string) (crypter *Crypter, err error) {
 	file, err := os.Open(pathToKey)
 
 	if err != nil {
 		return nil, fmt.Errorf("cannot open secret key: %w", err)
 	}
 
-	defer file.Close()
+	defer func() {
+		err = errors.Join(err, file.Close())
+	}()
 
 	key, err := io.ReadAll(file)
 

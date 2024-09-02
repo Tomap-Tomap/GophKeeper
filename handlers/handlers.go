@@ -741,7 +741,7 @@ func (gk *GophKeeperHandler) DeleteText(ctx context.Context, req *proto.DeleteTe
 
 // CreateFile handles the uploading of a file for a user. It retrieves the user ID from the context,
 // and stores the file information in the storage.
-func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer) error {
+func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer) (err error) {
 	userID, err := getUserIDFromContext(stream.Context())
 
 	if err != nil {
@@ -769,7 +769,9 @@ func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer
 		return status.Error(codes.Internal, err.Error())
 	}
 
-	defer dbf.Close()
+	defer func() {
+		err = errors.Join(err, dbf.Close())
+	}()
 
 	for {
 		req, err := stream.Recv()
@@ -814,7 +816,7 @@ func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer
 
 // UpdateFile handles the updating of a file for a user. It retrieves the user ID from the context,
 // and updates the file information in the storage.
-func (gk *GophKeeperHandler) UpdateFile(stream proto.GophKeeper_UpdateFileServer) error {
+func (gk *GophKeeperHandler) UpdateFile(stream proto.GophKeeper_UpdateFileServer) (err error) {
 	userID, err := getUserIDFromContext(stream.Context())
 
 	if err != nil {
@@ -843,7 +845,9 @@ func (gk *GophKeeperHandler) UpdateFile(stream proto.GophKeeper_UpdateFileServer
 		return status.Error(codes.Internal, err.Error())
 	}
 
-	defer dbf.Close()
+	defer func() {
+		err = errors.Join(err, dbf.Close())
+	}()
 
 	for {
 		req, err := stream.Recv()
@@ -895,7 +899,7 @@ func (gk *GophKeeperHandler) UpdateFile(stream proto.GophKeeper_UpdateFileServer
 
 // GetFile handles the retrieval of a file by its ID. It retrieves the user ID from the context,
 // and fetches the file information from the storage.
-func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.GophKeeper_GetFileServer) error {
+func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.GophKeeper_GetFileServer) (err error) {
 	userID, err := getUserIDFromContext(stream.Context())
 
 	if err != nil {
@@ -945,7 +949,9 @@ func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.Gop
 	if err != nil {
 		return status.Error(codes.Internal, err.Error())
 	}
-	defer filer.Close()
+	defer func() {
+		err = errors.Join(err, filer.Close())
+	}()
 
 	for {
 		content, err := filer.GetChunk()

@@ -284,7 +284,7 @@ func (s *Storage) CreateBank(ctx context.Context, userID, name, number, cvc, own
 			return nil, ErrUserNotFound
 		}
 
-		return nil, fmt.Errorf("insert into files table name %s: %w", name, err)
+		return nil, fmt.Errorf("insert into banks table name %s: %w", name, err)
 	}
 
 	return bank, nil
