@@ -1,9 +1,8 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
-import "google/protobuf/empty.proto";
 
-package gophkeeper;
+package gophkeeper.v1;
 
 option go_package = "gophkeeper/proto";
 
@@ -31,7 +30,7 @@ message Password {
     string login = 3;
     string password = 4;
     string meta = 5;
-    google.protobuf.Timestamp updateAt = 6;
+    google.protobuf.Timestamp update_at = 6;
 }
 
 message CreatePasswordRequest {
@@ -65,6 +64,9 @@ message GetPasswordResponse {
     Password password = 1;
 }
 
+message GetPasswordsRequest {
+}
+
 message GetPasswordsResponse {
     repeated Password passwords = 1;
 }
@@ -73,16 +75,19 @@ message DeletePasswordRequest {
     string id = 1;
 }
 
+message DeletePasswordResponse {
+}
+
 message File {
     string id = 1;
     string name = 2;
     string meta = 3;
-    google.protobuf.Timestamp updateAt = 4;
+    google.protobuf.Timestamp update_at = 4;
 }
 
 message CreateFileRequest {
     oneof data{
-        File fileInfo = 1;
+        File file_info = 1;
         bytes content = 2;
     }
 }
@@ -93,7 +98,7 @@ message CreateFileResponse {
 
 message UpdateFileRequest {
     oneof data{
-        File fileInfo = 1;
+        File file_info = 1;
         bytes content = 2;
     }
 }
@@ -108,33 +113,39 @@ message GetFileRequest {
 
 message GetFileResponse {
     oneof data{
-        File fileInfo = 1;
+        File file_info = 1;
         bytes content = 2;
     }
 }
 
+message GetFilesRequest {
+}
+
 message GetFilesResponse {
-    repeated File fileInfo = 1;
+    repeated File file_info = 1;
 }
 
 message DeleteFileRequest {
     string id = 1;
 }
 
+message DeleteFileResponse {
+}
+
 message Bank {
     string id = 1;
     string name = 2;
-    string cardNumber = 3;
+    string card_number = 3;
     string cvc = 4;
     string owner = 5;
     string exp = 6; 
     string meta = 7;
-    google.protobuf.Timestamp updateAt = 8;
+    google.protobuf.Timestamp update_at = 8;
 }
 
 message CreateBankRequest {
     string name = 1;
-    string cardNumber = 2;
+    string card_number = 2;
     string cvc = 3;
     string owner = 4;
     string exp = 5; 
@@ -148,7 +159,7 @@ message CreateBankResponse {
 message UpdateBankRequest {
     string id = 1;
     string name = 2;
-    string cardNumber = 3;
+    string card_number = 3;
     string cvc = 4;
     string owner = 5;
     string exp = 6; 
@@ -167,6 +178,9 @@ message GetBankResponse {
     Bank bank = 1;
 }
 
+message GetBanksRequest {
+}
+
 message GetBanksResponse {
     repeated Bank banks = 1;
 }
@@ -175,12 +189,16 @@ message DeleteBankRequest {
     string id = 1;
 }
 
+message DeleteBankResponse {
+    string id = 1;
+}
+
 message Text {
     string id = 1;
     string name = 2;
     string text = 3; 
     string meta = 4;
-    google.protobuf.Timestamp updateAt = 5;
+    google.protobuf.Timestamp update_at = 5;
 }
 
 message CreateTextRequest {
@@ -212,6 +230,9 @@ message GetTextResponse {
     Text text = 1;
 }
 
+message GetTextsRequest {
+}
+
 message GetTextsResponse {
     repeated Text texts = 1;
 }
@@ -220,36 +241,42 @@ message DeleteTextRequest {
     string id = 1;
 }
 
+message DeleteTextResponse {
+}
+
+message GetChunkSizeRequest {
+}
+
 message GetChunkSizeResponse {
     uint64 size = 1;  
 }
 
-service GophKeeper {
+service GophKeeperService {
     rpc Register(RegisterRequest) returns (RegisterResponse);
     rpc Auth(AuthRequest) returns (AuthResponse);
-    rpc GetChunkSize(google.protobuf.Empty) returns (GetChunkSizeResponse);
+    rpc GetChunkSize(GetChunkSizeRequest) returns (GetChunkSizeResponse);
 
     rpc CreatePassword(CreatePasswordRequest) returns (CreatePasswordResponse);
     rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
     rpc GetPassword(GetPasswordRequest) returns (GetPasswordResponse);
-    rpc GetPasswords(google.protobuf.Empty) returns (GetPasswordsResponse);
-    rpc DeletePassword(DeletePasswordRequest) returns (google.protobuf.Empty);
+    rpc GetPasswords(GetPasswordsRequest) returns (GetPasswordsResponse);
+    rpc DeletePassword(DeletePasswordRequest) returns (DeletePasswordResponse);
 
     rpc CreateFile(stream CreateFileRequest) returns (CreateFileResponse);
     rpc UpdateFile(stream UpdateFileRequest) returns (UpdateFileResponse);
     rpc GetFile(GetFileRequest) returns (stream GetFileResponse);
-    rpc GetFiles(google.protobuf.Empty) returns (GetFilesResponse);
-    rpc DeleteFile(DeleteFileRequest) returns (google.protobuf.Empty);
+    rpc GetFiles(GetFilesRequest) returns (GetFilesResponse);
+    rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
 
     rpc CreateBank(CreateBankRequest) returns (CreateBankResponse);
     rpc UpdateBank(UpdateBankRequest) returns (UpdateBankResponse);
     rpc GetBank(GetBankRequest) returns (GetBankResponse);
-    rpc GetBanks(google.protobuf.Empty) returns (GetBanksResponse);
-    rpc DeleteBank(DeleteBankRequest) returns (google.protobuf.Empty);
+    rpc GetBanks(GetBanksRequest) returns (GetBanksResponse);
+    rpc DeleteBank(DeleteBankRequest) returns (DeleteBankResponse);
 
     rpc CreateText(CreateTextRequest) returns (CreateTextResponse);
     rpc UpdateText(UpdateTextRequest) returns (UpdateTextResponse);
     rpc GetText(GetTextRequest) returns (GetTextResponse);
-    rpc GetTexts(google.protobuf.Empty) returns (GetTextsResponse);
-    rpc DeleteText(DeleteTextRequest) returns (google.protobuf.Empty);
+    rpc GetTexts(GetTextsRequest) returns (GetTextsResponse);
+    rpc DeleteText(DeleteTextRequest) returns (DeleteTextResponse);
 }

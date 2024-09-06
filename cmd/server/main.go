@@ -12,7 +12,7 @@ import (
 	"github.com/Tomap-Tomap/GophKeeper/hasher"
 	"github.com/Tomap-Tomap/GophKeeper/logger"
 	"github.com/Tomap-Tomap/GophKeeper/parameters"
-	"github.com/Tomap-Tomap/GophKeeper/proto"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
 	"github.com/Tomap-Tomap/GophKeeper/tokener"
 	"go.uber.org/zap"
@@ -61,7 +61,7 @@ func main() {
 		),
 	)
 
-	proto.RegisterGophKeeperServer(gs, handlers.NewGophKeeperHandler(s, h, t, fs, *storage.NewRetryPolicy(3, 5, 3), 75))
+	proto.RegisterGophKeeperServiceServer(gs, handlers.NewGophKeeperHandler(s, h, t, fs, *storage.NewRetryPolicy(3, 5, 3), 75))
 
 	eg.Go(func() error {
 		err := gs.Serve(listen)

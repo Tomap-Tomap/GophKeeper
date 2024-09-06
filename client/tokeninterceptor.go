@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Tomap-Tomap/GophKeeper/proto"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

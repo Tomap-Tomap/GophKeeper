@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/Tomap-Tomap/GophKeeper/crypto"
-	"github.com/Tomap-Tomap/GophKeeper/proto"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -76,7 +76,7 @@ func (suite *ClientTestSuite) SetupTest() {
 	ufcmo := new(UpdateFileClientMockedObject)
 	gfcmo := new(GetFileClientMockedObject)
 
-	proto.RegisterGophKeeperServer(server, gpmo)
+	proto.RegisterGophKeeperServiceServer(server, gpmo)
 
 	go func() {
 		if err := server.Serve(lis); err != nil && err != http.ErrServerClosed {

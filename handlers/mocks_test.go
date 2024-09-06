@@ -5,7 +5,7 @@ package handlers
 import (
 	"context"
 
-	"github.com/Tomap-Tomap/GophKeeper/proto"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"

@@ -15,12 +15,11 @@ import (
 	"path/filepath"
 
 	"github.com/Tomap-Tomap/GophKeeper/crypto"
-	"github.com/Tomap-Tomap/GophKeeper/proto"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding/gzip"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // Crypter defines the interface for cryptographic operations.
@@ -36,7 +35,7 @@ type Crypter interface {
 
 // Client represents the gRPC client for interacting with the GophKeeper service.
 type Client struct {
-	grpc    proto.GophKeeperClient
+	grpc    proto.GophKeeperServiceClient
 	conn    *grpc.ClientConn
 	crypter Crypter
 	ti      *tokenInterceptor
@@ -62,7 +61,7 @@ func New(crypter Crypter, addr string) (*Client, error) {
 	}
 
 	return &Client{
-		grpc:    proto.NewGophKeeperClient(conn),
+		grpc:    proto.NewGophKeeperServiceClient(conn),
 		conn:    conn,
 		crypter: crypter,
 		ti:      ti,
@@ -96,7 +95,7 @@ func (c *Client) SignIn(ctx context.Context, login, password string) error {
 
 // GetAllPasswords retrieves all stored passwords.
 func (c *Client) GetAllPasswords(ctx context.Context) ([]storage.Password, error) {
-	res, err := c.grpc.GetPasswords(ctx, &emptypb.Empty{})
+	res, err := c.grpc.GetPasswords(ctx, &proto.GetPasswordsRequest{})
 
 	if err != nil {
 		return nil, fmt.Errorf("cannot get passwords: %w", err)
@@ -185,7 +184,7 @@ func (c *Client) DeletePassword(ctx context.Context, id string) error {
 
 // GetAllBanks retrieves all stored bank details.
 func (c *Client) GetAllBanks(ctx context.Context) ([]storage.Bank, error) {
-	res, err := c.grpc.GetBanks(ctx, &emptypb.Empty{})
+	res, err := c.grpc.GetBanks(ctx, &proto.GetBanksRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("cannot get banks: %w", err)
 	}
@@ -274,7 +273,7 @@ func (c *Client) DeleteBank(ctx context.Context, id string) error {
 
 // GetAllTexts retrieves all stored text entries.
 func (c *Client) GetAllTexts(ctx context.Context) ([]storage.Text, error) {
-	res, err := c.grpc.GetTexts(ctx, &emptypb.Empty{})
+	res, err := c.grpc.GetTexts(ctx, &proto.GetTextsRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("cannot get texts: %w", err)
 	}
@@ -354,7 +353,7 @@ func (c *Client) DeleteText(ctx context.Context, id string) error {
 
 // GetAllFiles retrieves all stored file entries.
 func (c *Client) GetAllFiles(ctx context.Context) ([]storage.File, error) {
-	res, err := c.grpc.GetFiles(ctx, &emptypb.Empty{})
+	res, err := c.grpc.GetFiles(ctx, &proto.GetFilesRequest{})
 	if err != nil {
 		return nil, fmt.Errorf("cannot get files: %w", err)
 	}
@@ -379,7 +378,7 @@ func (c *Client) GetAllFiles(ctx context.Context) ([]storage.File, error) {
 
 // CreateFile creates a new file entry with the given details.
 func (c *Client) CreateFile(ctx context.Context, name, pathToFile, meta string) (err error) {
-	chunkSize, err := c.grpc.GetChunkSize(ctx, &emptypb.Empty{})
+	chunkSize, err := c.grpc.GetChunkSize(ctx, &proto.GetChunkSizeRequest{})
 
 	if err != nil {
 		return fmt.Errorf("cannot get chunk size: %w", err)
@@ -472,7 +471,7 @@ func (c *Client) CreateFile(ctx context.Context, name, pathToFile, meta string) 
 
 // UpdateFile updates an existing file entry with the given details.
 func (c *Client) UpdateFile(ctx context.Context, id, name, pathToFile, meta string) (err error) {
-	chunkSize, err := c.grpc.GetChunkSize(ctx, &emptypb.Empty{})
+	chunkSize, err := c.grpc.GetChunkSize(ctx, &proto.GetChunkSizeRequest{})
 	if err != nil {
 		return fmt.Errorf("cannot get chunk size: %w", err)
 	}
@@ -917,7 +916,7 @@ func (c *Client) sealFile(name, meta string) (retFile *storage.File, retErr erro
 	return
 }
 
-func (c *Client) receiveNonce(stream proto.GophKeeper_GetFileClient, w *bufio.Writer) ([]byte, error) {
+func (c *Client) receiveNonce(stream proto.GophKeeperService_GetFileClient, w *bufio.Writer) ([]byte, error) {
 	var nonce []byte
 	nonceSize := c.crypter.NonceSize()
 

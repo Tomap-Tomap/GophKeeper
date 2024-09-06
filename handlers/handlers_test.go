@@ -10,14 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Tomap-Tomap/GophKeeper/proto"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -515,7 +514,7 @@ func (suite *HandlersTestSuite) TestGetPasswords() {
 	require := suite.Require()
 
 	suite.Run("unauthenticated", func() {
-		res, err := suite.handler.GetPasswords(context.Background(), &emptypb.Empty{})
+		res, err := suite.handler.GetPasswords(context.Background(), &proto.GetPasswordsRequest{})
 		require.Error(err)
 		require.Equal(status.Code(err), codes.Unauthenticated)
 		require.Nil(res)
@@ -524,7 +523,7 @@ func (suite *HandlersTestSuite) TestGetPasswords() {
 	suite.Run("database error", func() {
 		suite.storageMock.onGetAllPassword(suite.testUserID, nil, testError)
 
-		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &proto.GetPasswordsRequest{})
 		require.ErrorContains(err, testError.Error())
 		require.Equal(status.Code(err), codes.Internal)
 		require.Nil(res)
@@ -533,7 +532,7 @@ func (suite *HandlersTestSuite) TestGetPasswords() {
 	suite.Run("unknown UserID error", func() {
 		suite.storageMock.onGetAllPassword(suite.testUserID, nil, storage.ErrUserNotFound)
 
-		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &proto.GetPasswordsRequest{})
 		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
 		require.Equal(status.Code(err), codes.Unknown)
 		require.Nil(res)
@@ -560,7 +559,7 @@ func (suite *HandlersTestSuite) TestGetPasswords() {
 		}
 		suite.storageMock.onGetAllPassword(suite.testUserID, passwords, nil)
 
-		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetPasswords(suite.testIncomingContext, &proto.GetPasswordsRequest{})
 		suite.Require().NoError(err)
 		suite.Require().Equal(&proto.GetPasswordsResponse{
 			Passwords: []*proto.Password{
@@ -827,7 +826,7 @@ func (suite *HandlersTestSuite) TestGetBanks() {
 	require := suite.Require()
 
 	suite.Run("unauthenticated", func() {
-		res, err := suite.handler.GetBanks(context.Background(), &emptypb.Empty{})
+		res, err := suite.handler.GetBanks(context.Background(), &proto.GetBanksRequest{})
 		require.Error(err)
 		require.Equal(status.Code(err), codes.Unauthenticated)
 		require.Nil(res)
@@ -836,7 +835,7 @@ func (suite *HandlersTestSuite) TestGetBanks() {
 	suite.Run("database error", func() {
 		suite.storageMock.onGetAllBanks(suite.testUserID, nil, testError)
 
-		res, err := suite.handler.GetBanks(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetBanks(suite.testIncomingContext, &proto.GetBanksRequest{})
 		require.ErrorContains(err, testError.Error())
 		require.Equal(status.Code(err), codes.Internal)
 		require.Nil(res)
@@ -845,7 +844,7 @@ func (suite *HandlersTestSuite) TestGetBanks() {
 	suite.Run("unknown UserID error", func() {
 		suite.storageMock.onGetAllBanks(suite.testUserID, nil, storage.ErrUserNotFound)
 
-		res, err := suite.handler.GetBanks(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetBanks(suite.testIncomingContext, &proto.GetBanksRequest{})
 		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
 		require.Equal(status.Code(err), codes.Unknown)
 		require.Nil(res)
@@ -876,7 +875,7 @@ func (suite *HandlersTestSuite) TestGetBanks() {
 		}
 		suite.storageMock.onGetAllBanks(suite.testUserID, banks, nil)
 
-		res, err := suite.handler.GetBanks(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetBanks(suite.testIncomingContext, &proto.GetBanksRequest{})
 		suite.Require().NoError(err)
 		suite.Require().Equal(&proto.GetBanksResponse{
 			Banks: []*proto.Bank{
@@ -1129,7 +1128,7 @@ func (suite *HandlersTestSuite) TestGetTexts() {
 	require := suite.Require()
 
 	suite.Run("unauthenticated", func() {
-		res, err := suite.handler.GetTexts(context.Background(), &emptypb.Empty{})
+		res, err := suite.handler.GetTexts(context.Background(), &proto.GetTextsRequest{})
 		require.Error(err)
 		require.Equal(status.Code(err), codes.Unauthenticated)
 		require.Nil(res)
@@ -1138,7 +1137,7 @@ func (suite *HandlersTestSuite) TestGetTexts() {
 	suite.Run("database error", func() {
 		suite.storageMock.onGetAllTexts(suite.testUserID, nil, testError)
 
-		res, err := suite.handler.GetTexts(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetTexts(suite.testIncomingContext, &proto.GetTextsRequest{})
 		require.ErrorContains(err, testError.Error())
 		require.Equal(status.Code(err), codes.Internal)
 		require.Nil(res)
@@ -1147,7 +1146,7 @@ func (suite *HandlersTestSuite) TestGetTexts() {
 	suite.Run("unknown UserID error", func() {
 		suite.storageMock.onGetAllTexts(suite.testUserID, nil, storage.ErrUserNotFound)
 
-		res, err := suite.handler.GetTexts(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetTexts(suite.testIncomingContext, &proto.GetTextsRequest{})
 		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
 		require.Equal(status.Code(err), codes.Unknown)
 		require.Nil(res)
@@ -1172,7 +1171,7 @@ func (suite *HandlersTestSuite) TestGetTexts() {
 		}
 		suite.storageMock.onGetAllTexts(suite.testUserID, texts, nil)
 
-		res, err := suite.handler.GetTexts(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetTexts(suite.testIncomingContext, &proto.GetTextsRequest{})
 		suite.Require().NoError(err)
 		suite.Require().Equal(&proto.GetTextsResponse{
 			Texts: []*proto.Text{
@@ -1738,7 +1737,7 @@ func (suite *HandlersTestSuite) TestGetFiles() {
 	require := suite.Require()
 
 	suite.Run("unauthenticated", func() {
-		res, err := suite.handler.GetFiles(context.Background(), &emptypb.Empty{})
+		res, err := suite.handler.GetFiles(context.Background(), &proto.GetFilesRequest{})
 		require.Error(err)
 		require.Equal(status.Code(err), codes.Unauthenticated)
 		require.Nil(res)
@@ -1747,7 +1746,7 @@ func (suite *HandlersTestSuite) TestGetFiles() {
 	suite.Run("database error", func() {
 		suite.storageMock.onGetAllFiles(suite.testUserID, nil, testError)
 
-		res, err := suite.handler.GetFiles(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetFiles(suite.testIncomingContext, &proto.GetFilesRequest{})
 		require.ErrorContains(err, testError.Error())
 		require.Equal(status.Code(err), codes.Internal)
 		require.Nil(res)
@@ -1756,7 +1755,7 @@ func (suite *HandlersTestSuite) TestGetFiles() {
 	suite.Run("unknown UserID error", func() {
 		suite.storageMock.onGetAllFiles(suite.testUserID, nil, storage.ErrUserNotFound)
 
-		res, err := suite.handler.GetFiles(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetFiles(suite.testIncomingContext, &proto.GetFilesRequest{})
 		require.ErrorContains(err, fmt.Sprintf("unknown UserID %s", suite.testUserID))
 		require.Equal(status.Code(err), codes.Unknown)
 		require.Nil(res)
@@ -1779,7 +1778,7 @@ func (suite *HandlersTestSuite) TestGetFiles() {
 		}
 		suite.storageMock.onGetAllFiles(suite.testUserID, files, nil)
 
-		res, err := suite.handler.GetFiles(suite.testIncomingContext, &emptypb.Empty{})
+		res, err := suite.handler.GetFiles(suite.testIncomingContext, &proto.GetFilesRequest{})
 		suite.Require().NoError(err)
 		suite.Require().Equal(&proto.GetFilesResponse{
 			FileInfo: []*proto.File{

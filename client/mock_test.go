@@ -6,14 +6,13 @@ import (
 	"context"
 
 	"github.com/Tomap-Tomap/GophKeeper/crypto"
-	"github.com/Tomap-Tomap/GophKeeper/proto"
-	"github.com/golang/protobuf/ptypes/empty"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
 )
 
 type GophKeeperServerMockedObject struct {
-	proto.UnimplementedGophKeeperServer
+	proto.UnimplementedGophKeeperServiceServer
 	mock.Mock
 }
 
@@ -41,7 +40,7 @@ func (m *GophKeeperServerMockedObject) onAuth(req *proto.AuthRequest, retRes *pr
 	m.On("Auth", req).Return(retRes, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) GetChunkSize(_ context.Context, _ *empty.Empty) (*proto.GetChunkSizeResponse, error) {
+func (m *GophKeeperServerMockedObject) GetChunkSize(_ context.Context, _ *proto.GetChunkSizeRequest) (*proto.GetChunkSizeResponse, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -53,7 +52,7 @@ func (m *GophKeeperServerMockedObject) onGetChunkSize(retRes *proto.GetChunkSize
 	m.On("GetChunkSize").Return(retRes, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) GetPasswords(_ context.Context, _ *empty.Empty) (*proto.GetPasswordsResponse, error) {
+func (m *GophKeeperServerMockedObject) GetPasswords(_ context.Context, _ *proto.GetPasswordsRequest) (*proto.GetPasswordsResponse, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -89,7 +88,7 @@ func (m *GophKeeperServerMockedObject) onUpdatePassword(req *proto.UpdatePasswor
 	m.On("UpdatePassword", req).Return(retRes, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) DeletePassword(_ context.Context, req *proto.DeletePasswordRequest) (*empty.Empty, error) {
+func (m *GophKeeperServerMockedObject) DeletePassword(_ context.Context, req *proto.DeletePasswordRequest) (*proto.DeletePasswordResponse, error) {
 	args := m.Called(req)
 
 	return nil, args.Error(1)
@@ -99,7 +98,7 @@ func (m *GophKeeperServerMockedObject) onDeletePassword(req *proto.DeletePasswor
 	m.On("DeletePassword", req).Return(nil, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) GetBanks(_ context.Context, _ *empty.Empty) (*proto.GetBanksResponse, error) {
+func (m *GophKeeperServerMockedObject) GetBanks(_ context.Context, _ *proto.GetBanksRequest) (*proto.GetBanksResponse, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -135,7 +134,7 @@ func (m *GophKeeperServerMockedObject) onUpdateBank(req *proto.UpdateBankRequest
 	m.On("UpdateBank", req).Return(retRes, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) DeleteBank(_ context.Context, req *proto.DeleteBankRequest) (*empty.Empty, error) {
+func (m *GophKeeperServerMockedObject) DeleteBank(_ context.Context, req *proto.DeleteBankRequest) (*proto.DeleteBankResponse, error) {
 	args := m.Called(req)
 
 	return nil, args.Error(1)
@@ -145,7 +144,7 @@ func (m *GophKeeperServerMockedObject) onDeleteBank(req *proto.DeleteBankRequest
 	m.On("DeleteBank", req).Return(nil, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) GetTexts(_ context.Context, _ *empty.Empty) (*proto.GetTextsResponse, error) {
+func (m *GophKeeperServerMockedObject) GetTexts(_ context.Context, _ *proto.GetTextsRequest) (*proto.GetTextsResponse, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -181,7 +180,7 @@ func (m *GophKeeperServerMockedObject) onUpdateText(req *proto.UpdateTextRequest
 	m.On("UpdateText", req).Return(retRes, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) DeleteText(_ context.Context, req *proto.DeleteTextRequest) (*empty.Empty, error) {
+func (m *GophKeeperServerMockedObject) DeleteText(_ context.Context, req *proto.DeleteTextRequest) (*proto.DeleteTextResponse, error) {
 	args := m.Called(req)
 
 	return nil, args.Error(1)
@@ -191,7 +190,7 @@ func (m *GophKeeperServerMockedObject) onDeleteText(req *proto.DeleteTextRequest
 	m.On("DeleteText", req).Return(nil, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) GetFiles(_ context.Context, _ *empty.Empty) (*proto.GetFilesResponse, error) {
+func (m *GophKeeperServerMockedObject) GetFiles(_ context.Context, _ *proto.GetFilesRequest) (*proto.GetFilesResponse, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -203,7 +202,7 @@ func (m *GophKeeperServerMockedObject) onGetFiles(retRes *proto.GetFilesResponse
 	m.On("GetFiles").Return(retRes, retErr)
 }
 
-func (m *GophKeeperServerMockedObject) CreateFile(_ proto.GophKeeper_CreateFileServer) error {
+func (m *GophKeeperServerMockedObject) CreateFile(_ proto.GophKeeperService_CreateFileServer) error {
 	args := m.Called()
 
 	return args.Error(0)
@@ -213,19 +212,19 @@ func (m *GophKeeperServerMockedObject) onCreateFile(retErr error) {
 	m.On("CreateFile").Return(retErr)
 }
 
-func (m *GophKeeperServerMockedObject) UpdateFile(stream proto.GophKeeper_UpdateFileServer) error {
+func (m *GophKeeperServerMockedObject) UpdateFile(stream proto.GophKeeperService_UpdateFileServer) error {
 	args := m.Called(stream)
 
 	return args.Error(1)
 }
 
-func (m *GophKeeperServerMockedObject) GetFile(req *proto.GetFileRequest, stream proto.GophKeeper_GetFileServer) error {
+func (m *GophKeeperServerMockedObject) GetFile(req *proto.GetFileRequest, stream proto.GophKeeperService_GetFileServer) error {
 	args := m.Called(req, stream)
 
 	return args.Error(1)
 }
 
-func (m *GophKeeperServerMockedObject) DeleteFile(_ context.Context, req *proto.DeleteFileRequest) (*empty.Empty, error) {
+func (m *GophKeeperServerMockedObject) DeleteFile(_ context.Context, req *proto.DeleteFileRequest) (*proto.DeleteFileResponse, error) {
 	args := m.Called(req)
 
 	return nil, args.Error(1)
@@ -361,10 +360,10 @@ func (m *CreateFileClientMockedObject) onCloseAndRecv(retRes *proto.CreateFileRe
 
 type GophKeeperClientMockedObject struct {
 	mock.Mock
-	proto.GophKeeperClient
+	proto.GophKeeperServiceClient
 }
 
-func (m *GophKeeperClientMockedObject) GetChunkSize(_ context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*proto.GetChunkSizeResponse, error) {
+func (m *GophKeeperClientMockedObject) GetChunkSize(_ context.Context, _ *proto.GetChunkSizeRequest, _ ...grpc.CallOption) (*proto.GetChunkSizeResponse, error) {
 	args := m.Called()
 
 	if args.Get(0) == nil {
@@ -377,41 +376,41 @@ func (m *GophKeeperClientMockedObject) onGetChunkSize(retRes *proto.GetChunkSize
 	m.On("GetChunkSize").Return(retRes, retErr)
 }
 
-func (m *GophKeeperClientMockedObject) CreateFile(_ context.Context, _ ...grpc.CallOption) (proto.GophKeeper_CreateFileClient, error) {
+func (m *GophKeeperClientMockedObject) CreateFile(_ context.Context, _ ...grpc.CallOption) (proto.GophKeeperService_CreateFileClient, error) {
 	args := m.Called()
 
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(proto.GophKeeper_CreateFileClient), args.Error(1)
+	return args.Get(0).(proto.GophKeeperService_CreateFileClient), args.Error(1)
 }
 
-func (m *GophKeeperClientMockedObject) onCreateFile(retStream proto.GophKeeper_CreateFileClient, retErr error) {
+func (m *GophKeeperClientMockedObject) onCreateFile(retStream proto.GophKeeperService_CreateFileClient, retErr error) {
 	m.On("CreateFile").Return(retStream, retErr)
 }
 
-func (m *GophKeeperClientMockedObject) UpdateFile(_ context.Context, _ ...grpc.CallOption) (proto.GophKeeper_UpdateFileClient, error) {
+func (m *GophKeeperClientMockedObject) UpdateFile(_ context.Context, _ ...grpc.CallOption) (proto.GophKeeperService_UpdateFileClient, error) {
 	args := m.Called()
 
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(proto.GophKeeper_UpdateFileClient), args.Error(1)
+	return args.Get(0).(proto.GophKeeperService_UpdateFileClient), args.Error(1)
 }
 
-func (m *GophKeeperClientMockedObject) onUpdateFile(retStream proto.GophKeeper_UpdateFileClient, retErr error) {
+func (m *GophKeeperClientMockedObject) onUpdateFile(retStream proto.GophKeeperService_UpdateFileClient, retErr error) {
 	m.On("UpdateFile").Return(retStream, retErr)
 }
 
-func (m *GophKeeperClientMockedObject) GetFile(_ context.Context, req *proto.GetFileRequest, _ ...grpc.CallOption) (proto.GophKeeper_GetFileClient, error) {
+func (m *GophKeeperClientMockedObject) GetFile(_ context.Context, req *proto.GetFileRequest, _ ...grpc.CallOption) (proto.GophKeeperService_GetFileClient, error) {
 	args := m.Called(req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(proto.GophKeeper_GetFileClient), args.Error(1)
+	return args.Get(0).(proto.GophKeeperService_GetFileClient), args.Error(1)
 }
 
-func (m *GophKeeperClientMockedObject) onGetFile(req *proto.GetFileRequest, retStream proto.GophKeeper_GetFileClient, retErr error) *mock.Call {
+func (m *GophKeeperClientMockedObject) onGetFile(req *proto.GetFileRequest, retStream proto.GophKeeperService_GetFileClient, retErr error) *mock.Call {
 	return m.On("GetFile", req, mock.Anything).Return(retStream, retErr)
 }
 

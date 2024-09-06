@@ -8,9 +8,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/Tomap-Tomap/GophKeeper/proto"
+	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -72,7 +71,7 @@ type FileStore interface {
 
 // GophKeeperHandler is a struct that implements the functionality of a gRPC server.
 type GophKeeperHandler struct {
-	proto.UnimplementedGophKeeperServer
+	proto.UnimplementedGophKeeperServiceServer
 
 	rp storage.RetryPolicy
 	s  Storage
@@ -186,7 +185,7 @@ func (gk *GophKeeperHandler) Auth(ctx context.Context, req *proto.AuthRequest) (
 }
 
 // GetChunkSize is a gRPC handler that returns the chunk size used by the file storage system.
-func (gk *GophKeeperHandler) GetChunkSize(_ context.Context, _ *empty.Empty) (*proto.GetChunkSizeResponse, error) {
+func (gk *GophKeeperHandler) GetChunkSize(_ context.Context, _ *proto.GetChunkSizeRequest) (*proto.GetChunkSizeResponse, error) {
 	return &proto.GetChunkSizeResponse{
 		Size: uint64(gk.fs.GetChunkSize()),
 	}, nil
@@ -304,7 +303,7 @@ func (gk *GophKeeperHandler) GetPassword(ctx context.Context, req *proto.GetPass
 
 // GetPasswords handles the retrieval of all password entries for a user. It retrieves the user ID from the context,
 // and fetches all password information from the storage.
-func (gk *GophKeeperHandler) GetPasswords(ctx context.Context, _ *empty.Empty) (*proto.GetPasswordsResponse, error) {
+func (gk *GophKeeperHandler) GetPasswords(ctx context.Context, _ *proto.GetPasswordsRequest) (*proto.GetPasswordsResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
@@ -347,7 +346,7 @@ func (gk *GophKeeperHandler) GetPasswords(ctx context.Context, _ *empty.Empty) (
 
 // DeletePassword handles the deletion of a password entry by its ID. It retrieves the user ID from the context,
 // and deletes the password information from the storage.
-func (gk *GophKeeperHandler) DeletePassword(ctx context.Context, req *proto.DeletePasswordRequest) (*empty.Empty, error) {
+func (gk *GophKeeperHandler) DeletePassword(ctx context.Context, req *proto.DeletePasswordRequest) (*proto.DeletePasswordResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
@@ -492,7 +491,7 @@ func (gk *GophKeeperHandler) GetBank(ctx context.Context, req *proto.GetBankRequ
 
 // GetBanks handles the retrieval of all bank entries for a user. It retrieves the user ID from the context,
 // and fetches all bank information from the storage.
-func (gk *GophKeeperHandler) GetBanks(ctx context.Context, _ *empty.Empty) (*proto.GetBanksResponse, error) {
+func (gk *GophKeeperHandler) GetBanks(ctx context.Context, _ *proto.GetBanksRequest) (*proto.GetBanksResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
@@ -537,7 +536,7 @@ func (gk *GophKeeperHandler) GetBanks(ctx context.Context, _ *empty.Empty) (*pro
 
 // DeleteBank handles the deletion of a bank entry by its ID. It retrieves the user ID from the context,
 // and deletes the bank information from the storage.
-func (gk *GophKeeperHandler) DeleteBank(ctx context.Context, req *proto.DeleteBankRequest) (*empty.Empty, error) {
+func (gk *GophKeeperHandler) DeleteBank(ctx context.Context, req *proto.DeleteBankRequest) (*proto.DeleteBankResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
@@ -672,7 +671,7 @@ func (gk *GophKeeperHandler) GetText(ctx context.Context, req *proto.GetTextRequ
 
 // GetTexts handles the retrieval of all text entries for a user. It retrieves the user ID from the context,
 // and fetches all text information from the storage.
-func (gk *GophKeeperHandler) GetTexts(ctx context.Context, _ *empty.Empty) (*proto.GetTextsResponse, error) {
+func (gk *GophKeeperHandler) GetTexts(ctx context.Context, _ *proto.GetTextsRequest) (*proto.GetTextsResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
@@ -714,7 +713,7 @@ func (gk *GophKeeperHandler) GetTexts(ctx context.Context, _ *empty.Empty) (*pro
 
 // DeleteText handles the deletion of a text entry by its ID. It retrieves the user ID from the context,
 // and deletes the text information from the storage.
-func (gk *GophKeeperHandler) DeleteText(ctx context.Context, req *proto.DeleteTextRequest) (*empty.Empty, error) {
+func (gk *GophKeeperHandler) DeleteText(ctx context.Context, req *proto.DeleteTextRequest) (*proto.DeleteTextResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
@@ -741,7 +740,7 @@ func (gk *GophKeeperHandler) DeleteText(ctx context.Context, req *proto.DeleteTe
 
 // CreateFile handles the uploading of a file for a user. It retrieves the user ID from the context,
 // and stores the file information in the storage.
-func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer) (err error) {
+func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeperService_CreateFileServer) (err error) {
 	userID, err := getUserIDFromContext(stream.Context())
 
 	if err != nil {
@@ -816,7 +815,7 @@ func (gk *GophKeeperHandler) CreateFile(stream proto.GophKeeper_CreateFileServer
 
 // UpdateFile handles the updating of a file for a user. It retrieves the user ID from the context,
 // and updates the file information in the storage.
-func (gk *GophKeeperHandler) UpdateFile(stream proto.GophKeeper_UpdateFileServer) (err error) {
+func (gk *GophKeeperHandler) UpdateFile(stream proto.GophKeeperService_UpdateFileServer) (err error) {
 	userID, err := getUserIDFromContext(stream.Context())
 
 	if err != nil {
@@ -899,7 +898,7 @@ func (gk *GophKeeperHandler) UpdateFile(stream proto.GophKeeper_UpdateFileServer
 
 // GetFile handles the retrieval of a file by its ID. It retrieves the user ID from the context,
 // and fetches the file information from the storage.
-func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.GophKeeper_GetFileServer) (err error) {
+func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.GophKeeperService_GetFileServer) (err error) {
 	userID, err := getUserIDFromContext(stream.Context())
 
 	if err != nil {
@@ -979,7 +978,7 @@ func (gk *GophKeeperHandler) GetFile(req *proto.GetFileRequest, stream proto.Gop
 
 // GetFiles handles the retrieval of all files for a user. It retrieves the user ID from the context,
 // and fetches all file information from the storage.
-func (gk *GophKeeperHandler) GetFiles(ctx context.Context, _ *empty.Empty) (*proto.GetFilesResponse, error) {
+func (gk *GophKeeperHandler) GetFiles(ctx context.Context, _ *proto.GetFilesRequest) (*proto.GetFilesResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
@@ -1020,7 +1019,7 @@ func (gk *GophKeeperHandler) GetFiles(ctx context.Context, _ *empty.Empty) (*pro
 
 // DeleteFile handles the deletion of a file by its ID. It retrieves the user ID from the context,
 // and deletes the file information from the storage.
-func (gk *GophKeeperHandler) DeleteFile(ctx context.Context, req *proto.DeleteFileRequest) (*empty.Empty, error) {
+func (gk *GophKeeperHandler) DeleteFile(ctx context.Context, req *proto.DeleteFileRequest) (*proto.DeleteFileResponse, error) {
 	userID, err := getUserIDFromContext(ctx)
 
 	if err != nil {
