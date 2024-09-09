@@ -160,18 +160,6 @@ func (suite *HandlersTestSuite) TestRegister() {
 		Password: suite.testPassword,
 	}
 
-	suite.Run("invalid arguments", func() {
-		req := &proto.RegisterRequest{
-			Login:    "",
-			Password: "",
-		}
-
-		res, err := suite.handler.Register(context.Background(), req)
-		require.Error(err)
-		require.Equal(status.Code(err), codes.InvalidArgument)
-		require.Nil(res)
-	})
-
 	suite.Run("generate salt error", func() {
 		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)
 		suite.hasherMock.onGenerateSalt(suite.testSaltLength, emptyString, testError)
@@ -250,18 +238,6 @@ func (suite *HandlersTestSuite) TestAuth() {
 		Login:    suite.testLogin,
 		Password: suite.testPassword,
 	}
-
-	suite.Run("invalid arguments", func() {
-		req := &proto.AuthRequest{
-			Login:    "",
-			Password: "",
-		}
-
-		res, err := suite.handler.Auth(context.Background(), req)
-		require.Error(err)
-		require.Equal(status.Code(err), codes.InvalidArgument)
-		require.Nil(res)
-	})
 
 	suite.Run("database error", func() {
 		suite.hasherMock.onGenerateHash(suite.testLogin, suite.testHashedLogin)

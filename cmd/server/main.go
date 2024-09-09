@@ -15,6 +15,7 @@ import (
 	proto "github.com/Tomap-Tomap/GophKeeper/proto/gophkeeper/v1"
 	"github.com/Tomap-Tomap/GophKeeper/storage"
 	"github.com/Tomap-Tomap/GophKeeper/tokener"
+	"github.com/bufbuild/protovalidate-go"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -50,10 +51,19 @@ func main() {
 		logger.Log.Fatal("Cannot create listener", zap.Error(err))
 	}
 
+	validator, err := protovalidate.New()
+
+	if err != nil {
+		logger.Log.Fatal("Cannot create validator", zap.Error(err))
+	}
+
+	v := handlers.NewValidator(validator)
+
 	gs := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
 			logger.UnaryInterceptorLogger,
 			t.UnaryServerInterceptor,
+			v.UnaryServerInterceptor,
 		),
 		grpc.ChainStreamInterceptor(
 			logger.StreamInterceptorLogger,

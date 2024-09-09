@@ -84,6 +84,7 @@ type GophKeeperHandler struct {
 
 // NewGophKeeperHandler initializes a GophKeeperHandler structure.
 func NewGophKeeperHandler(s Storage, h Hasher, t Tokener, fs FileStore, rp storage.RetryPolicy, saltLength int) *GophKeeperHandler {
+
 	return &GophKeeperHandler{
 		s:          s,
 		h:          h,
@@ -99,10 +100,6 @@ func NewGophKeeperHandler(s Storage, h Hasher, t Tokener, fs FileStore, rp stora
 func (gk *GophKeeperHandler) Register(ctx context.Context, req *proto.RegisterRequest) (*proto.RegisterResponse, error) {
 	login := strings.TrimSpace(req.GetLogin())
 	password := strings.TrimSpace(req.GetPassword())
-
-	if err := loginPasswordValidate(login, password); err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
 
 	loginHash := gk.h.GenerateHash(login)
 
@@ -145,10 +142,6 @@ func (gk *GophKeeperHandler) Register(ctx context.Context, req *proto.RegisterRe
 func (gk *GophKeeperHandler) Auth(ctx context.Context, req *proto.AuthRequest) (*proto.AuthResponse, error) {
 	login := strings.TrimSpace(req.GetLogin())
 	password := strings.TrimSpace(req.GetPassword())
-
-	if err := loginPasswordValidate(login, password); err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
 
 	loginHash := gk.h.GenerateHash(login)
 

@@ -26,7 +26,7 @@ message AuthResponse {
 }
 
 message Password {
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
   string name = 2 [(buf.validate.field).string.min_bytes = 1];
   string login = 3 [(buf.validate.field).string.min_bytes = 1];
   string password = 4 [(buf.validate.field).string.min_bytes = 1];
@@ -130,7 +130,7 @@ message DeleteFileRequest {
 message DeleteFileResponse {}
 
 message Bank {
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
   string name = 2 [(buf.validate.field).string.min_bytes = 1];
   string card_number = 3 [(buf.validate.field).string.min_bytes = 1];
   string cvc = 4 [(buf.validate.field).string.min_bytes = 1];
@@ -190,7 +190,7 @@ message DeleteBankResponse {
 }
 
 message Text {
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
   string name = 2 [(buf.validate.field).string.min_bytes = 1];
   string text = 3 [(buf.validate.field).string.min_bytes = 1];
   string meta = 4;
@@ -208,7 +208,7 @@ message CreateTextResponse {
 }
 
 message UpdateTextRequest {
-  string id = 1;
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
   string name = 2 [(buf.validate.field).string.min_bytes = 1];
   string text = 3 [(buf.validate.field).string.min_bytes = 1];
   string meta = 4;
