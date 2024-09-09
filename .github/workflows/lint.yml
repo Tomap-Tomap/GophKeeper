@@ -1,0 +1,29 @@
+name: lint
+
+on: 
+    pull_request:
+
+jobs:   
+  golangci-lint:
+    env:
+        GOFLAGS: "-buildvcs=false"
+    runs-on: ubuntu-latest
+    container: golang:1.22
+    steps:
+      - uses: actions/checkout@v4
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: ./       
+
+  lint-protos:
+    env:
+        GOFLAGS: "-buildvcs=false"
+    runs-on: ubuntu-latest
+    container: golang:1.22
+    steps:
+        - uses: actions/checkout@v2
+        - uses: bufbuild/buf-setup-action@v1
+        - uses: bufbuild/buf-lint-action@v1
+          with:
+            input: proto

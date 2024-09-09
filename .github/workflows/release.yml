@@ -1,0 +1,47 @@
+name: release
+
+on: 
+  push:
+    tags:
+      - v*
+  
+env:
+  APP_NAME: gophkeeper
+
+jobs:    
+  buildLinux:
+    runs-on: ubuntu-latest
+    container: golang:1.22
+    
+    steps:
+      - uses: actions/checkout@v4.1.7
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=date::$(date +'%Y-%m-%d')"
+      - name: Set outputs
+        id: vars
+        run: echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT 
+      - name: Set flags
+        id: flags
+        run: echo "::set-output name=build_flags::-ldflags \"-X main.buildVersion=${{ steps.vars.outputs.tag }} -X main.buildDate=${{ steps.date.outputs.date }} -X main.buildCommit=${{ github.sha }}\""
+      - name: Build server
+        working-directory: ./cmd/server
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o server_${{ env.APP_NAME }} main.go
+      - name: Builds client
+        working-directory: ./cmd/client
+        run: |
+          GOOS=linux GOARCH=amd64 go build ${{ steps.flags.outputs.build_flags }}  -o linux_${{ env.APP_NAME }} main.go
+          GOOS=windows GOARCH=amd64 go build ${{ steps.flags.outputs.build_flags }}  -o windows_${{ env.APP_NAME }}.exe main.go
+          GOOS=darwin GOARCH=amd64 go build ${{ steps.flags.outputs.build_flags }}  -o darwin_${{ env.APP_NAME }} main.go
+      - name: Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ./cmd/server/server_${{ env.APP_NAME }}
+            ./cmd/client/linux_${{ env.APP_NAME }}
+            ./cmd/client/windows_${{ env.APP_NAME }}.exe
+            ./cmd/client/darwin_${{ env.APP_NAME }}
+          prerelease: ${{ github.ref != 'refs/heads/master' }}  

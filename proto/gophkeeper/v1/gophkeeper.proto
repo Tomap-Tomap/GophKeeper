@@ -1,0 +1,275 @@
+syntax = "proto3";
+
+package gophkeeper.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "gophkeeper/proto";
+
+message RegisterRequest {
+  string login = 1 [(buf.validate.field).string.min_bytes = 1];
+  string password = 2 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message RegisterResponse {
+  string token = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message AuthRequest {
+  string login = 1 [(buf.validate.field).string.min_bytes = 1];
+  string password = 2 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message AuthResponse {
+  string token = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message Password {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+  string name = 2 [(buf.validate.field).string.min_bytes = 1];
+  string login = 3 [(buf.validate.field).string.min_bytes = 1];
+  string password = 4 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 5;
+  google.protobuf.Timestamp update_at = 6;
+}
+
+message CreatePasswordRequest {
+  string name = 1 [(buf.validate.field).string.min_bytes = 1];
+  string login = 2 [(buf.validate.field).string.min_bytes = 1];
+  string password = 3 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 4;
+}
+
+message CreatePasswordResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message UpdatePasswordRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+  string name = 2 [(buf.validate.field).string.min_bytes = 1];
+  string login = 3 [(buf.validate.field).string.min_bytes = 1];
+  string password = 4 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 5;
+}
+
+message UpdatePasswordResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetPasswordRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetPasswordResponse {
+  Password password = 1;
+}
+
+message GetPasswordsRequest {}
+
+message GetPasswordsResponse {
+  repeated Password passwords = 1;
+}
+
+message DeletePasswordRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message DeletePasswordResponse {}
+
+message File {
+  string id = 1;
+  string name = 2 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 3;
+  google.protobuf.Timestamp update_at = 4;
+}
+
+message CreateFileRequest {
+  oneof data {
+    File file_info = 1;
+    bytes content = 2;
+  }
+}
+
+message CreateFileResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message UpdateFileRequest {
+  oneof data {
+    File file_info = 1;
+    bytes content = 2;
+  }
+}
+
+message UpdateFileResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetFileRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetFileResponse {
+  oneof data {
+    File file_info = 1;
+    bytes content = 2;
+  }
+}
+
+message GetFilesRequest {}
+
+message GetFilesResponse {
+  repeated File file_info = 1;
+}
+
+message DeleteFileRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message DeleteFileResponse {}
+
+message Bank {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+  string name = 2 [(buf.validate.field).string.min_bytes = 1];
+  string card_number = 3 [(buf.validate.field).string.min_bytes = 1];
+  string cvc = 4 [(buf.validate.field).string.min_bytes = 1];
+  string owner = 5 [(buf.validate.field).string.min_bytes = 1];
+  string exp = 6 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 7;
+  google.protobuf.Timestamp update_at = 8;
+}
+
+message CreateBankRequest {
+  string name = 1 [(buf.validate.field).string.min_bytes = 1];
+  string card_number = 2 [(buf.validate.field).string.min_bytes = 1];
+  string cvc = 3 [(buf.validate.field).string.min_bytes = 1];
+  string owner = 4 [(buf.validate.field).string.min_bytes = 1];
+  string exp = 5 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 6;
+}
+
+message CreateBankResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message UpdateBankRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+  string name = 2 [(buf.validate.field).string.min_bytes = 1];
+  string card_number = 3 [(buf.validate.field).string.min_bytes = 1];
+  string cvc = 4 [(buf.validate.field).string.min_bytes = 1];
+  string owner = 5 [(buf.validate.field).string.min_bytes = 1];
+  string exp = 6 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 7;
+}
+
+message UpdateBankResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetBankRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetBankResponse {
+  Bank bank = 1;
+}
+
+message GetBanksRequest {}
+
+message GetBanksResponse {
+  repeated Bank banks = 1;
+}
+
+message DeleteBankRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message DeleteBankResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message Text {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+  string name = 2 [(buf.validate.field).string.min_bytes = 1];
+  string text = 3 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 4;
+  google.protobuf.Timestamp update_at = 5;
+}
+
+message CreateTextRequest {
+  string name = 1 [(buf.validate.field).string.min_bytes = 1];
+  string text = 2 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 3;
+}
+
+message CreateTextResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message UpdateTextRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+  string name = 2 [(buf.validate.field).string.min_bytes = 1];
+  string text = 3 [(buf.validate.field).string.min_bytes = 1];
+  string meta = 4;
+}
+
+message UpdateTextResponse {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetTextRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message GetTextResponse {
+  Text text = 1;
+}
+
+message GetTextsRequest {}
+
+message GetTextsResponse {
+  repeated Text texts = 1;
+}
+
+message DeleteTextRequest {
+  string id = 1 [(buf.validate.field).string.min_bytes = 1];
+}
+
+message DeleteTextResponse {}
+
+message GetChunkSizeRequest {}
+
+message GetChunkSizeResponse {
+  uint64 size = 1;
+}
+
+service GophKeeperService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc Auth(AuthRequest) returns (AuthResponse);
+  rpc GetChunkSize(GetChunkSizeRequest) returns (GetChunkSizeResponse);
+
+  rpc CreatePassword(CreatePasswordRequest) returns (CreatePasswordResponse);
+  rpc UpdatePassword(UpdatePasswordRequest) returns (UpdatePasswordResponse);
+  rpc GetPassword(GetPasswordRequest) returns (GetPasswordResponse);
+  rpc GetPasswords(GetPasswordsRequest) returns (GetPasswordsResponse);
+  rpc DeletePassword(DeletePasswordRequest) returns (DeletePasswordResponse);
+
+  rpc CreateFile(stream CreateFileRequest) returns (CreateFileResponse);
+  rpc UpdateFile(stream UpdateFileRequest) returns (UpdateFileResponse);
+  rpc GetFile(GetFileRequest) returns (stream GetFileResponse);
+  rpc GetFiles(GetFilesRequest) returns (GetFilesResponse);
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+
+  rpc CreateBank(CreateBankRequest) returns (CreateBankResponse);
+  rpc UpdateBank(UpdateBankRequest) returns (UpdateBankResponse);
+  rpc GetBank(GetBankRequest) returns (GetBankResponse);
+  rpc GetBanks(GetBanksRequest) returns (GetBanksResponse);
+  rpc DeleteBank(DeleteBankRequest) returns (DeleteBankResponse);
+
+  rpc CreateText(CreateTextRequest) returns (CreateTextResponse);
+  rpc UpdateText(UpdateTextRequest) returns (UpdateTextResponse);
+  rpc GetText(GetTextRequest) returns (GetTextResponse);
+  rpc GetTexts(GetTextsRequest) returns (GetTextsResponse);
+  rpc DeleteText(DeleteTextRequest) returns (DeleteTextResponse);
+}

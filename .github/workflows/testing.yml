@@ -1,0 +1,47 @@
+name: testing
+
+on: 
+  pull_request:
+
+jobs:
+  testing:
+    runs-on: ubuntu-latest
+    container: golang:1.22
+    env:
+      DSN: "host=postgres port=5432 user=gophkeeper password=gophkeeper dbname=gophkeeper sslmode=disable"
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: gophkeeper
+          POSTGRES_PASSWORD: gophkeeper
+          POSTGRES_DB: gophkeeper
+        options: >-
+            --health-cmd pg_isready
+            --health-interval 5s
+            --health-timeout 5s
+            --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4.1.7
+      - name: Install goose
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest  
+      - name: Miration
+        env:
+          GOOSE_DRIVER: postgres
+          GOOSE_DBSTRING: ${{ env.DSN }} 
+          GOOSE_MIGRATION_DIR: ./db/
+        run: |
+          goose up      
+      - name: Run coverage
+        env:
+          TEST_DSN: ${{ env.DSN }}
+        run: go test $(go list -buildvcs=false ./... | grep -v /proto) -race -tags=unit,integration -coverprofile=coverage.out -covermode=atomic
+      - name: Check coverage
+        run: go tool cover -func coverage.out | grep total | awk -v c=2 '{c=!($3>80)}END{exit c}'
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3  
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
