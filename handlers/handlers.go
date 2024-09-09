@@ -1043,23 +1043,6 @@ func (gk *GophKeeperHandler) DeleteFile(ctx context.Context, req *proto.DeleteFi
 	return nil, nil
 }
 
-func loginPasswordValidate(login, password string) error {
-	var err error
-
-	if login == "" {
-		err = errors.Join(errors.New("empty login"))
-	}
-
-	if password == "" {
-		err = errors.Join(err, errors.New("empty password"))
-	}
-
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 func getUserIDFromContext(ctx context.Context) (string, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 
